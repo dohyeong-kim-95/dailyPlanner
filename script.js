@@ -1,7 +1,7 @@
 // Constants
 const HOURS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
 const MINUTES = [0, 10, 20, 30, 40, 50];
-const COLORS = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#A8E6CF'];
+const COLORS = ['#FFB3BA', '#BAE1FF', '#BAFFC9', '#E0E0E0'];
 
 // State
 let currentDate = new Date().toISOString().split('T')[0];
@@ -95,6 +95,12 @@ function setupEventListeners() {
     btnSave.addEventListener('click', saveBlock);
     btnCancel.addEventListener('click', closeBlockModal);
     btnConfirmNo.addEventListener('click', closeConfirmModal);
+
+    // Copy all button
+    const copyAllBtn = document.getElementById('copyAllBtn');
+    if (copyAllBtn) {
+        copyAllBtn.addEventListener('click', copyAllBlocks);
+    }
 
     // Close modal on background click
     blockModal.addEventListener('click', (e) => {
@@ -401,16 +407,18 @@ function createBlockElement(container, type, block) {
     title.textContent = block.title;
     blockEl.appendChild(title);
 
-    // Add copy arrow button
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'copy-btn';
-    copyBtn.textContent = type === 'plan' ? '→' : '←';
-    copyBtn.title = type === 'plan' ? 'REAL로 복사' : 'PLAN으로 복사';
-    copyBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        copyBlock(block, type);
-    });
-    blockEl.appendChild(copyBtn);
+    // Add copy arrow button (only for PLAN blocks)
+    if (type === 'plan') {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.textContent = '→';
+        copyBtn.title = 'REAL로 복사';
+        copyBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            copyBlock(block, type);
+        });
+        blockEl.appendChild(copyBtn);
+    }
 
     // Add resize handles
     const topHandle = document.createElement('div');
@@ -629,6 +637,41 @@ function copyBlock(block, fromType) {
         };
 
         data[currentDate][toType].push(newBlock);
+        localStorage.setItem('dailyPlanner', JSON.stringify(data));
+        renderBlocks();
+    });
+}
+
+// Copy all blocks from PLAN to REAL
+function copyAllBlocks() {
+    const data = getData();
+    const planBlocks = data[currentDate]?.plan || [];
+
+    if (planBlocks.length === 0) {
+        alert('복사할 PLAN 블록이 없습니다.');
+        return;
+    }
+
+    openConfirmModal('PLAN의 모든 블록을 REAL로 복사하시겠습니까?\n(기존 REAL 블록은 모두 삭제됩니다)', () => {
+        if (!data[currentDate]) {
+            data[currentDate] = { plan: [], real: [] };
+        }
+
+        // Clear all REAL blocks
+        data[currentDate].real = [];
+
+        // Copy all PLAN blocks to REAL with new IDs
+        planBlocks.forEach(block => {
+            const newBlock = {
+                id: generateId(),
+                startTime: block.startTime,
+                endTime: block.endTime,
+                title: block.title,
+                color: block.color
+            };
+            data[currentDate].real.push(newBlock);
+        });
+
         localStorage.setItem('dailyPlanner', JSON.stringify(data));
         renderBlocks();
     });
