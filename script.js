@@ -102,6 +102,16 @@ function setupEventListeners() {
         copyAllBtn.addEventListener('click', copyAllBlocks);
     }
 
+    // Delete all buttons
+    const deletePlanBtn = document.getElementById('deletePlanBtn');
+    const deleteRealBtn = document.getElementById('deleteRealBtn');
+    if (deletePlanBtn) {
+        deletePlanBtn.addEventListener('click', () => deleteAllBlocks('plan'));
+    }
+    if (deleteRealBtn) {
+        deleteRealBtn.addEventListener('click', () => deleteAllBlocks('real'));
+    }
+
     // Close modal on background click
     blockModal.addEventListener('click', (e) => {
         if (e.target === blockModal) closeBlockModal();
@@ -345,9 +355,35 @@ function generateId() {
 function getData() {
     try {
         const data = localStorage.getItem('dailyPlanner');
-        return data ? JSON.parse(data) : {};
+        const parsed = data ? JSON.parse(data) : {};
+
+        // Validate data structure for current date
+        if (parsed[currentDate]) {
+            if (!parsed[currentDate].plan || !Array.isArray(parsed[currentDate].plan) ||
+                !parsed[currentDate].real || !Array.isArray(parsed[currentDate].real)) {
+                console.warn(`Invalid data structure for ${currentDate}, clearing date data`);
+                delete parsed[currentDate];
+                localStorage.setItem('dailyPlanner', JSON.stringify(parsed));
+            }
+        }
+
+        return parsed;
     } catch (e) {
         console.error('Error loading data:', e);
+        // Try to recover by clearing only current date's data
+        try {
+            const data = localStorage.getItem('dailyPlanner');
+            if (data) {
+                const parsed = JSON.parse(data);
+                delete parsed[currentDate];
+                localStorage.setItem('dailyPlanner', JSON.stringify(parsed));
+                console.log(`Cleared corrupted data for ${currentDate}`);
+                return parsed;
+            }
+        } catch (recoveryError) {
+            console.error('Failed to recover data, clearing all:', recoveryError);
+            localStorage.removeItem('dailyPlanner');
+        }
         return {};
     }
 }
@@ -358,7 +394,17 @@ function saveData() {
         localStorage.setItem('dailyPlanner', JSON.stringify(data));
     } catch (e) {
         console.error('Error saving data:', e);
-        alert('데이터 저장에 실패했습니다.');
+
+        // Try to save without current date's data
+        try {
+            const data = getData();
+            delete data[currentDate];
+            localStorage.setItem('dailyPlanner', JSON.stringify(data));
+            alert(`데이터 저장 오류가 발생하여 ${currentDate}의 데이터를 삭제했습니다.`);
+        } catch (recoveryError) {
+            console.error('Failed to save data:', recoveryError);
+            alert('데이터 저장에 실패했습니다. 브라우저 저장소가 가득 찼을 수 있습니다.');
+        }
     }
 }
 
@@ -572,6 +618,7 @@ function handleResize(e) {
     const position = calculateBlockPosition(data.startTime, data.endTime);
     el.style.top = position.top + 'px';
     el.style.width = position.width + 'px';
+    el.style.height = position.height + 'px';
 }
 
 // End resize
@@ -677,6 +724,30 @@ function copyAllBlocks() {
     });
 }
 
+// Delete all blocks of a specific type
+function deleteAllBlocks(type) {
+    const data = getData();
+    const blocks = data[currentDate]?.[type] || [];
+
+    if (blocks.length === 0) {
+        alert('삭제할 블록이 없습니다.');
+        return;
+    }
+
+    const typeName = type === 'plan' ? 'PLAN' : 'REAL';
+    openConfirmModal(`${typeName}의 모든 블록을 삭제하시겠습니까?`, () => {
+        if (!data[currentDate]) {
+            data[currentDate] = { plan: [], real: [] };
+        }
+
+        // Clear all blocks of the specified type
+        data[currentDate][type] = [];
+
+        localStorage.setItem('dailyPlanner', JSON.stringify(data));
+        renderBlocks();
+    });
+}
+
 function calculateBlockPosition(startTime, endTime) {
     const startMinutes = timeToMinutes(startTime);
     const endMinutes = timeToMinutes(endTime);
@@ -684,8 +755,12 @@ function calculateBlockPosition(startTime, endTime) {
 
     // Calculate slot position
     const [startHour, startMinute] = startTime.split(':').map(Number);
-    const hourIndex = HOURS.indexOf(startHour);
-    const minuteIndex = MINUTES.indexOf(startMinute);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+
+    const startHourIndex = HOURS.indexOf(startHour);
+    const startMinuteIndex = MINUTES.indexOf(startMinute);
+    const endHourIndex = HOURS.indexOf(endHour);
+    const endMinuteIndex = MINUTES.indexOf(endMinute);
 
     // Get first row to calculate dimensions
     const firstRow = planContent.querySelector('.time-row');
@@ -697,12 +772,26 @@ function calculateBlockPosition(startTime, endTime) {
     const slotWidth = firstSlot.offsetWidth;
     const labelWidth = hourLabel.offsetWidth;
 
-    const top = hourIndex * rowHeight + 2;
-    const left = labelWidth + minuteIndex * slotWidth + minuteIndex + 2;
-    const width = (duration / 10) * slotWidth + (duration / 10) - 2;
-    const height = rowHeight - 4;
+    const top = startHourIndex * rowHeight + 2;
+    const left = labelWidth + startMinuteIndex * slotWidth + startMinuteIndex + 2;
 
-    return { top, left, width, height };
+    // Check if block spans multiple rows
+    if (startHourIndex === endHourIndex) {
+        // Same row - calculate width normally
+        const width = (duration / 10) * slotWidth + (duration / 10) - 2;
+        const height = rowHeight - 4;
+        return { top, left, width, height };
+    } else {
+        // Multiple rows - calculate height and limit width to row boundary
+        const rowSpan = endHourIndex - startHourIndex;
+        const height = (rowSpan + 1) * rowHeight - 4;
+
+        // Width: from start slot to end of the row
+        const remainingSlots = 6 - startMinuteIndex; // 6 slots per row
+        const width = remainingSlots * slotWidth + (remainingSlots - 1) - 2;
+
+        return { top, left, width, height };
+    }
 }
 
 // Initialize app

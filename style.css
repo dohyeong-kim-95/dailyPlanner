@@ -102,9 +102,8 @@ header h1 {
     font-weight: bold;
 }
 
-.copy-all-btn {
-    background-color: var(--color-2);
-    color: white;
+.copy-all-btn,
+.delete-all-btn {
     border: none;
     padding: 8px 16px;
     border-radius: 4px;
@@ -113,9 +112,19 @@ header h1 {
     font-weight: bold;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     transition: opacity 0.2s;
+    color: white;
 }
 
-.copy-all-btn:hover {
+.copy-all-btn {
+    background-color: var(--color-2);
+}
+
+.delete-all-btn {
+    background-color: #ff6b6b;
+}
+
+.copy-all-btn:hover,
+.delete-all-btn:hover {
     opacity: 0.8;
 }
 
@@ -152,6 +161,7 @@ header h1 {
 
 .grid-content {
     position: relative;
+    overflow: hidden;
 }
 
 .time-row {
