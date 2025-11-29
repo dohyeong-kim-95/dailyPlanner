@@ -374,6 +374,10 @@ function renderBlocks() {
     const data = getData();
     const dateData = data[currentDate] || { plan: [], real: [] };
 
+    // Clear copy arrows
+    const copyArrowsContainer = document.getElementById('copyArrows');
+    copyArrowsContainer.innerHTML = '';
+
     renderBlocksForType('plan', dateData.plan);
     renderBlocksForType('real', dateData.real);
 }
@@ -401,17 +405,6 @@ function createBlockElement(container, type, block) {
     title.textContent = block.title;
     blockEl.appendChild(title);
 
-    // Add copy arrow button
-    const copyBtn = document.createElement('button');
-    copyBtn.className = 'copy-btn';
-    copyBtn.textContent = type === 'plan' ? '→' : '←';
-    copyBtn.title = type === 'plan' ? 'REAL로 복사' : 'PLAN으로 복사';
-    copyBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        copyBlock(block, type);
-    });
-    blockEl.appendChild(copyBtn);
-
     // Add resize handles
     const topHandle = document.createElement('div');
     topHandle.className = 'resize-handle top';
@@ -434,6 +427,34 @@ function createBlockElement(container, type, block) {
     setupBlockEventListeners(blockEl, block);
 
     container.appendChild(blockEl);
+
+    // Create copy arrow button in the center area
+    createCopyArrow(block, type, position);
+}
+
+// Create copy arrow button in center area
+function createCopyArrow(block, type, position) {
+    const copyArrowsContainer = document.getElementById('copyArrows');
+
+    const arrowBtn = document.createElement('button');
+    arrowBtn.className = 'arrow-btn';
+    arrowBtn.textContent = type === 'plan' ? '→' : '←';
+    arrowBtn.title = type === 'plan' ? 'REAL로 복사' : 'PLAN으로 복사';
+    arrowBtn.dataset.blockId = block.id;
+    arrowBtn.dataset.blockType = type;
+
+    // Position arrow at the vertical center of the block
+    arrowBtn.style.position = 'absolute';
+    arrowBtn.style.top = (position.top + position.height / 2 - 16) + 'px'; // 16px is half of button height
+    arrowBtn.style.left = '50%';
+    arrowBtn.style.transform = 'translateX(-50%)';
+
+    arrowBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyBlock(block, type);
+    });
+
+    copyArrowsContainer.appendChild(arrowBtn);
 }
 
 // Setup block event listeners
@@ -646,17 +667,22 @@ function calculateBlockPosition(startTime, endTime) {
 
     // Get first row to calculate dimensions
     const firstRow = planContent.querySelector('.time-row');
-    const hourLabel = firstRow.querySelector('.hour-label');
     const timeSlots = firstRow.querySelector('.time-slots');
     const firstSlot = timeSlots.querySelector('.time-slot');
 
     const rowHeight = firstRow.offsetHeight;
     const slotWidth = firstSlot.offsetWidth;
-    const labelWidth = hourLabel.offsetWidth;
+    const gap = 1; // Grid gap from CSS
 
+    // Calculate number of slots this block spans
+    const numSlots = duration / 10;
+
+    // Position calculation (relative to grid-content, not including hour-label)
     const top = hourIndex * rowHeight + 2;
-    const left = labelWidth + minuteIndex * slotWidth + minuteIndex + 2;
-    const width = (duration / 10) * slotWidth + (duration / 10) - 2;
+    // left: start from time-slots area (border 1px) + slot position + gaps before this slot
+    const left = 1 + minuteIndex * slotWidth + minuteIndex * gap + 2;
+    // width: slot widths + gaps between slots - small margin
+    const width = numSlots * slotWidth + (numSlots - 1) * gap - 2;
     const height = rowHeight - 4;
 
     return { top, left, width, height };
