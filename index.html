@@ -12,7 +12,7 @@
             <h1>Daily Planner</h1>
             <div class="date-control">
                 <button class="btn-prev">◀</button>
-                <span class="current-date" id="currentDate">2024-11-29</span>
+                <span class="current-date" id="currentDate"></span>
                 <button class="btn-next">▶</button>
             </div>
         </header>
@@ -23,6 +23,7 @@
                 <div class="section-header">
                     <h2 class="section-title">PLAN</h2>
                     <button class="copy-all-btn" id="copyAllBtn">전체 → REAL</button>
+                    <button class="delete-all-btn" id="deletePlanBtn">전체삭제</button>
                 </div>
                 <div class="time-grid" id="planGrid" data-type="plan">
                     <div class="time-labels">
@@ -48,7 +49,10 @@
 
             <!-- REAL 영역 -->
             <section class="planner-section">
-                <h2 class="section-title">REAL</h2>
+                <div class="section-header">
+                    <h2 class="section-title">REAL</h2>
+                    <button class="delete-all-btn" id="deleteRealBtn">전체삭제</button>
+                </div>
                 <div class="time-grid" id="realGrid" data-type="real">
                     <div class="time-labels">
                         <div class="time-header">
