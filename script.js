@@ -2,6 +2,12 @@
 const HOURS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
 const MINUTES = [0, 10, 20, 30, 40, 50];
 const COLORS = ['#FFB3BA', '#BAE1FF', '#BAFFC9', '#E0E0E0'];
+const GIST_FILENAME = 'planner-data.json';
+
+// Gist State
+let gistId = null;
+let gistToken = null;
+let isSyncing = false;
 
 // State
 let currentDate = new Date().toISOString().split('T')[0];
@@ -20,12 +26,19 @@ const planContent = document.getElementById('planContent');
 const realContent = document.getElementById('realContent');
 const blockModal = document.getElementById('blockModal');
 const confirmModal = document.getElementById('confirmModal');
+const settingsModal = document.getElementById('settingsModal');
 const currentDateEl = document.getElementById('currentDate');
 const blockTitleInput = document.getElementById('blockTitle');
 const btnSave = document.getElementById('btnSave');
 const btnCancel = document.getElementById('btnCancel');
 const btnConfirmYes = document.getElementById('btnConfirmYes');
 const btnConfirmNo = document.getElementById('btnConfirmNo');
+const btnSettings = document.getElementById('btnSettings');
+const btnSettingsSave = document.getElementById('btnSettingsSave');
+const btnSettingsCancel = document.getElementById('btnSettingsCancel');
+const syncStatus = document.getElementById('syncStatus');
+const gistIdInput = document.getElementById('gistId');
+const gistTokenInput = document.getElementById('gistToken');
 
 // Initialize
 function init() {
@@ -34,7 +47,11 @@ function init() {
     createTimeGrid(realContent, 'real');
     setupColorPicker();
     setupEventListeners();
+    loadGistSettings();
     loadData();
+
+    // Setup window focus listener for auto-sync
+    window.addEventListener('focus', handleWindowFocus);
 }
 
 // Create time grid
@@ -112,12 +129,20 @@ function setupEventListeners() {
         deleteRealBtn.addEventListener('click', () => deleteAllBlocks('real'));
     }
 
+    // Settings button
+    btnSettings.addEventListener('click', openSettingsModal);
+    btnSettingsSave.addEventListener('click', saveGistSettings);
+    btnSettingsCancel.addEventListener('click', closeSettingsModal);
+
     // Close modal on background click
     blockModal.addEventListener('click', (e) => {
         if (e.target === blockModal) closeBlockModal();
     });
     confirmModal.addEventListener('click', (e) => {
         if (e.target === confirmModal) closeConfirmModal();
+    });
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) closeSettingsModal();
     });
 }
 
@@ -445,6 +470,9 @@ function saveData() {
     try {
         const data = getData();
         localStorage.setItem('dailyPlanner', JSON.stringify(data));
+
+        // Save to Gist in background
+        saveToGist(data);
     } catch (e) {
         console.error('Error saving data:', e);
 
@@ -470,8 +498,32 @@ function addBlockToData(type, block) {
     localStorage.setItem('dailyPlanner', JSON.stringify(data));
 }
 
-function loadData() {
+async function loadData() {
+    // 1. Load from localStorage first (fast)
     renderBlocks();
+
+    // 2. Load from Gist in background (if configured)
+    if (gistId && gistToken) {
+        try {
+            const gistData = await loadFromGist();
+            if (gistData) {
+                // Compare with localStorage
+                const localData = getData();
+                const gistDataStr = JSON.stringify(gistData);
+                const localDataStr = JSON.stringify(localData);
+
+                if (gistDataStr !== localDataStr) {
+                    // Update localStorage with Gist data
+                    localStorage.setItem('dailyPlanner', gistDataStr);
+                    // Re-render with new data
+                    renderBlocks();
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load from Gist:', error);
+            // Continue using localStorage
+        }
+    }
 }
 
 // Render blocks
@@ -848,6 +900,187 @@ function calculateBlockPosition(startTime, endTime) {
     const height = rowHeight - 4;
 
     return { top, left, width, height };
+}
+
+// Gist Settings Functions
+function loadGistSettings() {
+    gistId = localStorage.getItem('gistId');
+    gistToken = localStorage.getItem('gistToken');
+    updateSyncStatus();
+}
+
+function openSettingsModal() {
+    gistIdInput.value = gistId || '';
+    gistTokenInput.value = gistToken || '';
+    settingsModal.classList.add('active');
+}
+
+function closeSettingsModal() {
+    settingsModal.classList.remove('active');
+}
+
+function saveGistSettings() {
+    const newGistId = gistIdInput.value.trim();
+    const newGistToken = gistTokenInput.value.trim();
+
+    if (newGistId && newGistToken) {
+        gistId = newGistId;
+        gistToken = newGistToken;
+        localStorage.setItem('gistId', gistId);
+        localStorage.setItem('gistToken', gistToken);
+
+        // Migrate current data to Gist
+        const data = getData();
+        saveToGist(data);
+
+        alert('Gist 설정이 저장되었습니다. 데이터를 동기화합니다.');
+    } else if (!newGistId && !newGistToken) {
+        // Clear settings
+        gistId = null;
+        gistToken = null;
+        localStorage.removeItem('gistId');
+        localStorage.removeItem('gistToken');
+        alert('Gist 연동이 해제되었습니다. localStorage만 사용합니다.');
+    } else {
+        alert('Gist ID와 Token을 모두 입력해주세요.');
+        return;
+    }
+
+    updateSyncStatus();
+    closeSettingsModal();
+}
+
+function updateSyncStatus() {
+    if (!gistId || !gistToken) {
+        syncStatus.textContent = '💾 로컬만';
+        syncStatus.title = 'Gist 연동 안 함';
+    } else if (isSyncing) {
+        syncStatus.textContent = '⏳ 동기화 중...';
+        syncStatus.title = 'Gist와 동기화 중';
+    } else {
+        syncStatus.textContent = '✅ 최신 상태';
+        syncStatus.title = 'Gist와 동기화됨';
+    }
+}
+
+// Gist API Functions
+async function loadFromGist() {
+    if (!gistId || !gistToken) return null;
+
+    try {
+        isSyncing = true;
+        updateSyncStatus();
+
+        const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+            headers: {
+                'Authorization': `token ${gistToken}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('Gist를 찾을 수 없습니다. ID를 확인해주세요.');
+            } else if (response.status === 401) {
+                throw new Error('인증에 실패했습니다. Token을 확인해주세요.');
+            }
+            throw new Error(`Gist 로드 실패: ${response.status}`);
+        }
+
+        const gist = await response.json();
+        const file = gist.files[GIST_FILENAME];
+
+        if (!file) {
+            console.warn(`Gist에 ${GIST_FILENAME} 파일이 없습니다.`);
+            return null;
+        }
+
+        const data = JSON.parse(file.content);
+        isSyncing = false;
+        updateSyncStatus();
+        return data;
+
+    } catch (error) {
+        console.error('Load from Gist error:', error);
+        isSyncing = false;
+        syncStatus.textContent = '❌ 동기화 실패';
+        syncStatus.title = error.message;
+        return null;
+    }
+}
+
+async function saveToGist(data) {
+    if (!gistId || !gistToken) return;
+
+    try {
+        isSyncing = true;
+        updateSyncStatus();
+
+        const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `token ${gistToken}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                files: {
+                    [GIST_FILENAME]: {
+                        content: JSON.stringify(data, null, 2)
+                    }
+                }
+            })
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                throw new Error('Gist를 찾을 수 없습니다. ID를 확인해주세요.');
+            } else if (response.status === 401) {
+                throw new Error('인증에 실패했습니다. Token을 확인해주세요.');
+            }
+            throw new Error(`Gist 저장 실패: ${response.status}`);
+        }
+
+        isSyncing = false;
+        updateSyncStatus();
+
+    } catch (error) {
+        console.error('Save to Gist error:', error);
+        isSyncing = false;
+        syncStatus.textContent = '❌ 동기화 실패';
+        syncStatus.title = error.message;
+
+        // Show user notification for save failures
+        setTimeout(() => {
+            if (!isSyncing) {
+                alert(`Gist 저장 실패: ${error.message}\nLocalStorage에는 저장되었습니다.`);
+            }
+        }, 1000);
+    }
+}
+
+// Window focus handler for auto-sync
+async function handleWindowFocus() {
+    if (!gistId || !gistToken) return;
+
+    try {
+        const gistData = await loadFromGist();
+        if (gistData) {
+            const localData = getData();
+            const gistDataStr = JSON.stringify(gistData);
+            const localDataStr = JSON.stringify(localData);
+
+            if (gistDataStr !== localDataStr) {
+                // Update localStorage with Gist data
+                localStorage.setItem('dailyPlanner', gistDataStr);
+                // Re-render with new data (silently)
+                renderBlocks();
+            }
+        }
+    } catch (error) {
+        console.error('Auto-sync failed:', error);
+        // Fail silently, don't disturb user
+    }
 }
 
 // Initialize app

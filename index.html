@@ -9,7 +9,13 @@
 <body>
     <div class="container">
         <header>
-            <h1>Daily Planner</h1>
+            <div class="header-top">
+                <h1>Daily Planner</h1>
+                <div class="header-actions">
+                    <span class="sync-status" id="syncStatus">💾 로컬만</span>
+                    <button class="btn-settings" id="btnSettings" title="설정">⚙️</button>
+                </div>
+            </div>
             <div class="date-control">
                 <button class="btn-prev">◀</button>
                 <span class="current-date" id="currentDate"></span>
@@ -102,6 +108,45 @@
             <div class="modal-actions">
                 <button class="btn-cancel" id="btnConfirmNo">아니오</button>
                 <button class="btn-save" id="btnConfirmYes">예</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 설정 모달 -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content settings-modal">
+            <h3>GitHub Gist 연동 설정</h3>
+
+            <div class="settings-guide">
+                <p><strong>📝 설정 방법:</strong></p>
+                <ol>
+                    <li><a href="https://gist.github.com" target="_blank">https://gist.github.com</a> 접속</li>
+                    <li>New gist 클릭</li>
+                    <li>파일명: <code>planner-data.json</code>, 내용: <code>{}</code></li>
+                    <li>Create secret gist 클릭</li>
+                    <li>URL에서 ID 복사 (gist.github.com/.../[이부분])</li>
+                    <li><a href="https://github.com/settings/tokens" target="_blank">토큰 생성 페이지</a> 접속</li>
+                    <li>Generate new token (classic) 클릭</li>
+                    <li>gist 권한 체크 후 생성</li>
+                </ol>
+            </div>
+
+            <div class="form-group">
+                <label for="gistId">Gist ID:</label>
+                <input type="text" id="gistId" placeholder="예: a1b2c3d4e5f6g7h8i9j0">
+            </div>
+
+            <div class="form-group">
+                <label for="gistToken">Personal Access Token:</label>
+                <input type="password" id="gistToken" placeholder="ghp_xxxxxxxxxxxx">
+                <small>입력한 내용은 이 브라우저에만 저장됩니다</small>
+            </div>
+
+            <p class="settings-note">💡 Gist 연동 안 하면 localStorage만 사용합니다 (기존 방식)</p>
+
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnSettingsCancel">취소</button>
+                <button class="btn-save" id="btnSettingsSave">저장</button>
             </div>
         </div>
     </div>

@@ -38,10 +38,44 @@ header {
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
+.header-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
 header h1 {
     font-size: 24px;
-    margin-bottom: 10px;
-    text-align: center;
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sync-status {
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 4px 8px;
+    background-color: var(--bg-main);
+    border-radius: 4px;
+}
+
+.btn-settings {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+}
+
+.btn-settings:hover {
+    background-color: var(--bg-main);
 }
 
 .date-control {
@@ -427,6 +461,63 @@ header h1 {
     margin-bottom: 20px;
     font-size: 16px;
     text-align: center;
+}
+
+/* Settings Modal */
+.settings-modal {
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.settings-guide {
+    background-color: var(--bg-main);
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+.settings-guide ol {
+    margin: 10px 0 0 20px;
+    padding: 0;
+}
+
+.settings-guide li {
+    margin: 5px 0;
+}
+
+.settings-guide code {
+    background-color: var(--bg-white);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 13px;
+}
+
+.settings-guide a {
+    color: #2196F3;
+    text-decoration: none;
+}
+
+.settings-guide a:hover {
+    text-decoration: underline;
+}
+
+.form-group small {
+    display: block;
+    margin-top: 5px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.settings-note {
+    background-color: #fff3cd;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    margin: 15px 0;
+    border-left: 4px solid #ffc107;
 }
 
 /* Responsive Design */
