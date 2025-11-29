@@ -93,6 +93,7 @@ header h1 {
     align-items: center;
     gap: 15px;
     margin-bottom: 15px;
+    position: relative;
 }
 
 .section-title {
@@ -121,6 +122,10 @@ header h1 {
 
 .delete-all-btn {
     background-color: #ff6b6b;
+    position: absolute;
+    right: 0;
+    padding: 6px 12px;
+    font-size: 18px;
 }
 
 .copy-all-btn:hover,
