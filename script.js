@@ -346,6 +346,59 @@ function timeToMinutes(time) {
     return adjustedHour * 60 + minute;
 }
 
+// Split block into multiple segments by hour boundaries
+function splitBlockByHour(block) {
+    const [startHour, startMinute] = block.startTime.split(':').map(Number);
+    const [endHour, endMinute] = block.endTime.split(':').map(Number);
+
+    // Adjust hours for next day (00:00 - 01:50)
+    const adjustedStartHour = startHour < 5 ? startHour + 24 : startHour;
+    const adjustedEndHour = endHour < 5 ? endHour + 24 : endHour;
+
+    // If same hour, no split needed
+    if (adjustedStartHour === adjustedEndHour) {
+        return [{
+            ...block,
+            segmentStart: block.startTime,
+            segmentEnd: block.endTime
+        }];
+    }
+
+    // Multiple hours - split into segments
+    const segments = [];
+    let currentHour = adjustedStartHour;
+    let currentMinute = startMinute;
+
+    while (currentHour < adjustedEndHour || (currentHour === adjustedEndHour && currentMinute < endMinute)) {
+        const segmentStart = `${String(currentHour % 24).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+
+        // Move to next hour boundary or end time
+        let nextHour = currentHour;
+        let nextMinute = 0;
+
+        if (currentHour < adjustedEndHour) {
+            nextHour = currentHour + 1;
+            nextMinute = 0;
+        } else {
+            nextHour = adjustedEndHour;
+            nextMinute = endMinute;
+        }
+
+        const segmentEnd = `${String(nextHour % 24).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`;
+
+        segments.push({
+            ...block,
+            segmentStart,
+            segmentEnd
+        });
+
+        currentHour = nextHour;
+        currentMinute = nextMinute;
+    }
+
+    return segments;
+}
+
 // Generate unique ID
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -437,7 +490,11 @@ function renderBlocksForType(type, blocks) {
     container.querySelectorAll('.block').forEach(block => block.remove());
 
     blocks.forEach(block => {
-        createBlockElement(container, type, block);
+        // Split block into hour segments
+        const segments = splitBlockByHour(block);
+        segments.forEach(segment => {
+            createBlockElement(container, type, segment);
+        });
     });
 }
 
@@ -450,7 +507,11 @@ function createBlockElement(container, type, block) {
 
     const title = document.createElement('div');
     title.className = 'block-title';
-    title.textContent = block.title;
+
+    // Use segment times if available, otherwise use block times
+    const displayStart = block.segmentStart || block.startTime;
+    const displayEnd = block.segmentEnd || block.endTime;
+    title.textContent = `${displayStart}-${displayEnd} ${block.title}`;
     blockEl.appendChild(title);
 
     // Add copy arrow button (only for PLAN blocks)
@@ -477,8 +538,10 @@ function createBlockElement(container, type, block) {
     bottomHandle.dataset.handle = 'bottom';
     blockEl.appendChild(bottomHandle);
 
-    // Position block
-    const position = calculateBlockPosition(block.startTime, block.endTime);
+    // Position block using segment times if available
+    const startTime = block.segmentStart || block.startTime;
+    const endTime = block.segmentEnd || block.endTime;
+    const position = calculateBlockPosition(startTime, endTime);
     blockEl.style.top = position.top + 'px';
     blockEl.style.left = position.left + 'px';
     blockEl.style.width = position.width + 'px';
@@ -759,7 +822,6 @@ function calculateBlockPosition(startTime, endTime) {
 
     const startHourIndex = HOURS.indexOf(startHour);
     const startMinuteIndex = MINUTES.indexOf(startMinute);
-    const endHourIndex = HOURS.indexOf(endHour);
     const endMinuteIndex = MINUTES.indexOf(endMinute);
 
     // Get first row to calculate dimensions
@@ -775,23 +837,12 @@ function calculateBlockPosition(startTime, endTime) {
     const top = startHourIndex * rowHeight + 2;
     const left = labelWidth + startMinuteIndex * slotWidth + startMinuteIndex + 2;
 
-    // Check if block spans multiple rows
-    if (startHourIndex === endHourIndex) {
-        // Same row - calculate width normally
-        const width = (duration / 10) * slotWidth + (duration / 10) - 2;
-        const height = rowHeight - 4;
-        return { top, left, width, height };
-    } else {
-        // Multiple rows - calculate height and limit width to row boundary
-        const rowSpan = endHourIndex - startHourIndex;
-        const height = (rowSpan + 1) * rowHeight - 4;
+    // Calculate width based on duration
+    // Since blocks are now split by hour, they should always be in the same row
+    const width = (duration / 10) * slotWidth + (duration / 10) - 2;
+    const height = rowHeight - 4;
 
-        // Width: from start slot to end of the row
-        const remainingSlots = 6 - startMinuteIndex; // 6 slots per row
-        const width = remainingSlots * slotWidth + (remainingSlots - 1) - 2;
-
-        return { top, left, width, height };
-    }
+    return { top, left, width, height };
 }
 
 // Initialize app

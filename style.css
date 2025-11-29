@@ -52,7 +52,7 @@ header h1 {
 }
 
 .date-control button {
-    background-color: var(--color-2);
+    background-color: #2196F3;
     color: white;
     border: none;
     padding: 8px 15px;
@@ -89,16 +89,22 @@ header h1 {
 
 .section-header {
     display: flex;
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     gap: 15px;
     margin-bottom: 15px;
 }
 
+.header-buttons {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
 .section-title {
     font-size: 20px;
     margin: 0;
-    color: var(--color-2);
+    color: #2196F3;
     font-weight: bold;
 }
 
@@ -116,11 +122,13 @@ header h1 {
 }
 
 .copy-all-btn {
-    background-color: var(--color-2);
+    background-color: #2196F3;
 }
 
 .delete-all-btn {
     background-color: #ff6b6b;
+    padding: 8px 12px;
+    font-size: 18px;
 }
 
 .copy-all-btn:hover,
@@ -271,22 +279,22 @@ header h1 {
 .copy-arrows {
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
+    justify-content: center;
     align-items: center;
-    padding-top: 90px;
     gap: 40px;
-    min-width: 40px;
+    min-width: 50px;
 }
 
 .arrow-btn {
-    background-color: var(--color-2);
+    background-color: #2196F3;
     color: white;
     border: none;
-    padding: 8px 12px;
+    padding: 12px 16px;
     border-radius: 4px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 20px;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-weight: bold;
 }
 
 .arrow-btn:hover {
@@ -394,7 +402,7 @@ header h1 {
 }
 
 .btn-save {
-    background-color: var(--color-2);
+    background-color: #2196F3;
     color: white;
 }
 
