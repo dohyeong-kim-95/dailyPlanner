@@ -346,6 +346,50 @@ function timeToMinutes(time) {
     return adjustedHour * 60 + minute;
 }
 
+// Format block time with line breaks for multi-hour blocks
+function formatBlockTimeWithBreaks(startTime, endTime) {
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+
+    // Adjust hours for next day (00:00 - 01:50)
+    const adjustedStartHour = startHour < 5 ? startHour + 24 : startHour;
+    const adjustedEndHour = endHour < 5 ? endHour + 24 : endHour;
+
+    // If same hour, no line breaks needed
+    if (adjustedStartHour === adjustedEndHour) {
+        return `${startTime}-${endTime}`;
+    }
+
+    // Multiple hours - create line breaks
+    const timeSegments = [];
+    let currentHour = adjustedStartHour;
+    let currentMinute = startMinute;
+
+    while (currentHour < adjustedEndHour || (currentHour === adjustedEndHour && currentMinute < endMinute)) {
+        const segmentStart = `${String(currentHour % 24).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+
+        // Move to next hour boundary or end time
+        let nextHour = currentHour;
+        let nextMinute = 0;
+
+        if (currentHour < adjustedEndHour) {
+            nextHour = currentHour + 1;
+            nextMinute = 0;
+        } else {
+            nextHour = adjustedEndHour;
+            nextMinute = endMinute;
+        }
+
+        const segmentEnd = `${String(nextHour % 24).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`;
+        timeSegments.push(`${segmentStart}-${segmentEnd}`);
+
+        currentHour = nextHour;
+        currentMinute = nextMinute;
+    }
+
+    return timeSegments.join('<br>');
+}
+
 // Generate unique ID
 function generateId() {
     return Date.now().toString(36) + Math.random().toString(36).substr(2);
@@ -450,7 +494,10 @@ function createBlockElement(container, type, block) {
 
     const title = document.createElement('div');
     title.className = 'block-title';
-    title.textContent = block.title;
+
+    // Format time with line breaks for multi-hour blocks
+    const timeText = formatBlockTimeWithBreaks(block.startTime, block.endTime);
+    title.innerHTML = timeText + ' ' + block.title;
     blockEl.appendChild(title);
 
     // Add copy arrow button (only for PLAN blocks)
