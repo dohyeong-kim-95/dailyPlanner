@@ -505,13 +505,18 @@ function createBlockElement(container, type, block) {
     blockEl.dataset.id = block.id;
     blockEl.dataset.type = type;
 
-    const title = document.createElement('div');
-    title.className = 'block-title';
-
-    // Use segment times if available, otherwise use block times
+    // Create time display
+    const timeDisplay = document.createElement('div');
+    timeDisplay.className = 'block-time';
     const displayStart = block.segmentStart || block.startTime;
     const displayEnd = block.segmentEnd || block.endTime;
-    title.textContent = `${displayStart}-${displayEnd} ${block.title}`;
+    timeDisplay.textContent = `${displayStart}-${displayEnd}`;
+    blockEl.appendChild(timeDisplay);
+
+    // Create title display
+    const title = document.createElement('div');
+    title.className = 'block-title';
+    title.textContent = block.title;
     blockEl.appendChild(title);
 
     // Add copy arrow button (only for PLAN blocks)
