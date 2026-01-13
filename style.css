@@ -111,15 +111,27 @@ header h1 {
     display: flex;
     gap: 20px;
     position: relative;
+    margin-bottom: 20px;
 }
 
-/* Todo Sidebar */
-.todo-sidebar {
-    width: 280px;
-    flex-shrink: 0;
+.planner-section {
+    flex: 1;
+    background-color: var(--bg-white);
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    min-width: 400px;
+}
+
+/* Bottom Section - Todo & Journal */
+.bottom-section {
     display: flex;
-    flex-direction: column;
     gap: 20px;
+}
+
+.todo-container,
+.journal-container {
+    flex: 1;
 }
 
 .todo-section,
@@ -192,7 +204,7 @@ header h1 {
 
 .journal-textarea {
     width: 100%;
-    min-height: 150px;
+    min-height: 200px;
     resize: vertical;
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -209,15 +221,6 @@ header h1 {
 
 .journal-textarea::placeholder {
     color: #999;
-}
-
-.planner-section {
-    flex: 1;
-    background-color: var(--bg-white);
-    border-radius: 8px;
-    padding: 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    min-width: 400px;
 }
 
 .section-header {

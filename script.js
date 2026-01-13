@@ -1,5 +1,5 @@
 // Constants
-const HOURS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
+const HOURS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 const MINUTES = [0, 10, 20, 30, 40, 50];
 const COLORS = ['#FFB3BA', '#BAE1FF', '#BAFFC9', '#E0E0E0'];
 const COLOR_CATEGORIES = {

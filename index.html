@@ -22,43 +22,6 @@
         </header>
 
         <main class="planner-container">
-            <!-- Todo 사이드바 -->
-            <aside class="todo-sidebar">
-                <div class="todo-section">
-                    <h3>오늘의 할 일</h3>
-                    <div class="todo-list" id="todoList">
-                        <div class="todo-item" draggable="true">
-                            <input type="checkbox" class="todo-checkbox">
-                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
-                        </div>
-                        <div class="todo-item" draggable="true">
-                            <input type="checkbox" class="todo-checkbox">
-                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
-                        </div>
-                        <div class="todo-item" draggable="true">
-                            <input type="checkbox" class="todo-checkbox">
-                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
-                        </div>
-                        <div class="todo-item" draggable="true">
-                            <input type="checkbox" class="todo-checkbox">
-                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
-                        </div>
-                        <div class="todo-item" draggable="true">
-                            <input type="checkbox" class="todo-checkbox">
-                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
-                        </div>
-                        <div class="todo-item" draggable="true">
-                            <input type="checkbox" class="todo-checkbox">
-                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
-                        </div>
-                    </div>
-                </div>
-                <div class="journal-section">
-                    <h3>오늘의 메모</h3>
-                    <textarea id="journalNote" class="journal-textarea" placeholder="오늘 하루는 어땠나요?"></textarea>
-                </div>
-            </aside>
-
             <!-- PLAN 영역 -->
             <section class="planner-section">
                 <div class="section-header">
@@ -110,6 +73,47 @@
                 </div>
             </section>
         </main>
+
+        <!-- Todo & Journal 영역 -->
+        <section class="bottom-section">
+            <div class="todo-container">
+                <div class="todo-section">
+                    <h3>오늘의 할 일</h3>
+                    <div class="todo-list" id="todoList">
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="journal-container">
+                <div class="journal-section">
+                    <h3>오늘의 메모</h3>
+                    <textarea id="journalNote" class="journal-textarea" placeholder="오늘 하루는 어땠나요?"></textarea>
+                </div>
+            </div>
+        </section>
     </div>
 
     <!-- 블록 생성/수정 모달 -->
