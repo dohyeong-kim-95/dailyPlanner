@@ -15,9 +15,50 @@
                 <span class="current-date" id="currentDate"></span>
                 <button class="btn-next">▶</button>
             </div>
+            <div class="header-right">
+                <button class="btn-export" id="btnExport">Export Day ⬇</button>
+                <button class="btn-settings" id="btnSettings">⚙️</button>
+            </div>
         </header>
 
         <main class="planner-container">
+            <!-- Todo 사이드바 -->
+            <aside class="todo-sidebar">
+                <div class="todo-section">
+                    <h3>오늘의 할 일</h3>
+                    <div class="todo-list" id="todoList">
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                        <div class="todo-item" draggable="true">
+                            <input type="checkbox" class="todo-checkbox">
+                            <input type="text" class="todo-text" placeholder="할 일을 입력하세요">
+                        </div>
+                    </div>
+                </div>
+                <div class="journal-section">
+                    <h3>오늘의 메모</h3>
+                    <textarea id="journalNote" class="journal-textarea" placeholder="오늘 하루는 어땠나요?"></textarea>
+                </div>
+            </aside>
+
             <!-- PLAN 영역 -->
             <section class="planner-section">
                 <div class="section-header">
@@ -105,6 +146,53 @@
             </div>
         </div>
     </div>
+
+    <!-- 설정 모달 -->
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <h3>설정</h3>
+            <div class="form-group">
+                <label>Export 형식:</label>
+                <div class="radio-group">
+                    <label class="radio-label">
+                        <input type="radio" name="exportFormat" value="json" checked>
+                        JSON만
+                    </label>
+                    <label class="radio-label">
+                        <input type="radio" name="exportFormat" value="both">
+                        JSON + Markdown
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>색상 카테고리:</label>
+                <div class="color-categories">
+                    <div class="color-category">
+                        <div class="color-swatch" style="background-color: #E0E0E0;"></div>
+                        <span>회색 = 수면</span>
+                    </div>
+                    <div class="color-category">
+                        <div class="color-swatch" style="background-color: #BAE1FF;"></div>
+                        <span>파랑 = 업무</span>
+                    </div>
+                    <div class="color-category">
+                        <div class="color-swatch" style="background-color: #BAFFC9;"></div>
+                        <span>초록 = 휴식</span>
+                    </div>
+                    <div class="color-category">
+                        <div class="color-swatch" style="background-color: #FFB3BA;"></div>
+                        <span>빨강 = 기타</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnSettingsClose">닫기</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast 알림 -->
+    <div id="toast" class="toast"></div>
 
     <script src="script.js"></script>
 </body>

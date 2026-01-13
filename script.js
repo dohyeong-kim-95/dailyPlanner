@@ -2,6 +2,13 @@
 const HOURS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
 const MINUTES = [0, 10, 20, 30, 40, 50];
 const COLORS = ['#FFB3BA', '#BAE1FF', '#BAFFC9', '#E0E0E0'];
+const COLOR_CATEGORIES = {
+    '#E0E0E0': '수면',
+    '#BAE1FF': '업무',
+    '#BAFFC9': '휴식',
+    '#FFB3BA': '기타'
+};
+const DAYS_OF_WEEK = ['일', '월', '화', '수', '목', '금', '토'];
 
 // State
 let currentDate = new Date().toISOString().split('T')[0];
@@ -14,26 +21,39 @@ let resizing = false;
 let resizeBlock = null;
 let resizeHandle = null;
 let longPressTimer = null;
+let journalNoteSaveTimer = null;
 
 // DOM Elements
 const planContent = document.getElementById('planContent');
 const realContent = document.getElementById('realContent');
 const blockModal = document.getElementById('blockModal');
 const confirmModal = document.getElementById('confirmModal');
+const settingsModal = document.getElementById('settingsModal');
 const currentDateEl = document.getElementById('currentDate');
 const blockTitleInput = document.getElementById('blockTitle');
 const btnSave = document.getElementById('btnSave');
 const btnCancel = document.getElementById('btnCancel');
 const btnConfirmYes = document.getElementById('btnConfirmYes');
 const btnConfirmNo = document.getElementById('btnConfirmNo');
+const btnExport = document.getElementById('btnExport');
+const btnSettings = document.getElementById('btnSettings');
+const btnSettingsClose = document.getElementById('btnSettingsClose');
+const journalNoteTextarea = document.getElementById('journalNote');
+const toast = document.getElementById('toast');
 
 // Initialize
 function init() {
-    currentDateEl.textContent = currentDate;
+    cleanOldData();
+    updateDateDisplay();
     createTimeGrid(planContent, 'plan');
     createTimeGrid(realContent, 'real');
     setupColorPicker();
     setupEventListeners();
+    setupTodoListeners();
+    setupJournalNoteListener();
+    setupDateNavigation();
+    setupKeyboardShortcuts();
+    loadSettings();
     loadData();
 }
 
@@ -96,6 +116,17 @@ function setupEventListeners() {
     btnCancel.addEventListener('click', closeBlockModal);
     btnConfirmNo.addEventListener('click', closeConfirmModal);
 
+    // Export and Settings buttons
+    if (btnExport) {
+        btnExport.addEventListener('click', exportDay);
+    }
+    if (btnSettings) {
+        btnSettings.addEventListener('click', openSettingsModal);
+    }
+    if (btnSettingsClose) {
+        btnSettingsClose.addEventListener('click', closeSettingsModal);
+    }
+
     // Copy all button
     const copyAllBtn = document.getElementById('copyAllBtn');
     if (copyAllBtn) {
@@ -118,6 +149,9 @@ function setupEventListeners() {
     });
     confirmModal.addEventListener('click', (e) => {
         if (e.target === confirmModal) closeConfirmModal();
+    });
+    settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) closeSettingsModal();
     });
 }
 
@@ -464,7 +498,7 @@ function saveData() {
 function addBlockToData(type, block) {
     const data = getData();
     if (!data[currentDate]) {
-        data[currentDate] = { plan: [], real: [] };
+        data[currentDate] = { plan: [], real: [], todos: [], journalNote: '' };
     }
     data[currentDate][type].push(block);
     localStorage.setItem('dailyPlanner', JSON.stringify(data));
@@ -472,15 +506,17 @@ function addBlockToData(type, block) {
 
 function loadData() {
     renderBlocks();
+    loadTodos();
+    loadJournalNote();
 }
 
 // Render blocks
 function renderBlocks() {
     const data = getData();
-    const dateData = data[currentDate] || { plan: [], real: [] };
+    const dateData = data[currentDate] || { plan: [], real: [], todos: [], journalNote: '' };
 
-    renderBlocksForType('plan', dateData.plan);
-    renderBlocksForType('real', dateData.real);
+    renderBlocksForType('plan', dateData.plan || []);
+    renderBlocksForType('real', dateData.real || []);
 }
 
 function renderBlocksForType(type, blocks) {
@@ -728,7 +764,7 @@ function copyBlock(block, fromType) {
     openConfirmModal(`정말로 ${direction} 복사하시겠습니까?`, () => {
         const data = getData();
         if (!data[currentDate]) {
-            data[currentDate] = { plan: [], real: [] };
+            data[currentDate] = { plan: [], real: [], todos: [], journalNote: '' };
         }
 
         // Remove overlapping blocks in target type
@@ -769,7 +805,7 @@ function copyAllBlocks() {
 
     openConfirmModal('PLAN의 모든 블록을 REAL로 복사하시겠습니까?\n(기존 REAL 블록은 모두 삭제됩니다)', () => {
         if (!data[currentDate]) {
-            data[currentDate] = { plan: [], real: [] };
+            data[currentDate] = { plan: [], real: [], todos: [], journalNote: '' };
         }
 
         // Clear all REAL blocks
@@ -805,7 +841,7 @@ function deleteAllBlocks(type) {
     const typeName = type === 'plan' ? 'PLAN' : 'REAL';
     openConfirmModal(`${typeName}의 모든 블록을 삭제하시겠습니까?`, () => {
         if (!data[currentDate]) {
-            data[currentDate] = { plan: [], real: [] };
+            data[currentDate] = { plan: [], real: [], todos: [], journalNote: '' };
         }
 
         // Clear all blocks of the specified type
@@ -848,6 +884,467 @@ function calculateBlockPosition(startTime, endTime) {
     const height = rowHeight - 4;
 
     return { top, left, width, height };
+}
+
+// Date utility functions
+function updateDateDisplay() {
+    const date = new Date(currentDate + 'T00:00:00');
+    const dayOfWeek = DAYS_OF_WEEK[date.getDay()];
+    currentDateEl.textContent = `${currentDate} (${dayOfWeek})`;
+}
+
+function getMonday(dateStr) {
+    const date = new Date(dateStr + 'T00:00:00');
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(date);
+    monday.setDate(diff);
+    return monday.toISOString().split('T')[0];
+}
+
+function cleanOldData() {
+    try {
+        const monday = getMonday(currentDate);
+        const data = getData();
+        const allDates = Object.keys(data).filter(key => /^\d{4}-\d{2}-\d{2}$/.test(key));
+
+        let cleaned = false;
+        allDates.forEach(date => {
+            if (new Date(date + 'T00:00:00') < new Date(monday + 'T00:00:00')) {
+                delete data[date];
+                cleaned = true;
+            }
+        });
+
+        if (cleaned) {
+            localStorage.setItem('dailyPlanner', JSON.stringify(data));
+            console.log(`Cleaned data before ${monday}`);
+        }
+    } catch (e) {
+        console.error('Error cleaning old data:', e);
+    }
+}
+
+// Setup date navigation
+function setupDateNavigation() {
+    const btnPrev = document.querySelector('.btn-prev');
+    const btnNext = document.querySelector('.btn-next');
+
+    if (btnPrev) {
+        btnPrev.addEventListener('click', () => {
+            const date = new Date(currentDate + 'T00:00:00');
+            date.setDate(date.getDate() - 1);
+            currentDate = date.toISOString().split('T')[0];
+            updateDateDisplay();
+            loadData();
+        });
+    }
+
+    if (btnNext) {
+        btnNext.addEventListener('click', () => {
+            const date = new Date(currentDate + 'T00:00:00');
+            date.setDate(date.getDate() + 1);
+            currentDate = date.toISOString().split('T')[0];
+            updateDateDisplay();
+            loadData();
+        });
+    }
+}
+
+// Todo functionality
+function setupTodoListeners() {
+    const todoItems = document.querySelectorAll('.todo-item');
+
+    todoItems.forEach((item, index) => {
+        const checkbox = item.querySelector('.todo-checkbox');
+        const textInput = item.querySelector('.todo-text');
+
+        // Checkbox change
+        checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+                item.classList.add('completed');
+            } else {
+                item.classList.remove('completed');
+            }
+            saveTodos();
+        });
+
+        // Text input change
+        textInput.addEventListener('input', () => {
+            saveTodos();
+        });
+
+        // Drag and drop
+        item.addEventListener('dragstart', handleTodoDragStart);
+        item.addEventListener('dragover', handleTodoDragOver);
+        item.addEventListener('drop', handleTodoDrop);
+        item.addEventListener('dragend', handleTodoDragEnd);
+    });
+}
+
+let draggedTodoItem = null;
+
+function handleTodoDragStart(e) {
+    draggedTodoItem = this;
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleTodoDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault();
+    }
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleTodoDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation();
+    }
+
+    if (draggedTodoItem !== this) {
+        const todoList = document.getElementById('todoList');
+        const allItems = Array.from(todoList.querySelectorAll('.todo-item'));
+        const draggedIndex = allItems.indexOf(draggedTodoItem);
+        const targetIndex = allItems.indexOf(this);
+
+        if (draggedIndex < targetIndex) {
+            this.parentNode.insertBefore(draggedTodoItem, this.nextSibling);
+        } else {
+            this.parentNode.insertBefore(draggedTodoItem, this);
+        }
+
+        saveTodos();
+    }
+
+    return false;
+}
+
+function handleTodoDragEnd(e) {
+    this.classList.remove('dragging');
+    draggedTodoItem = null;
+}
+
+function saveTodos() {
+    const data = getData();
+    if (!data[currentDate]) {
+        data[currentDate] = { plan: [], real: [], todos: [], journalNote: '' };
+    }
+
+    const todoItems = document.querySelectorAll('.todo-item');
+    const todos = Array.from(todoItems).map((item, index) => {
+        const checkbox = item.querySelector('.todo-checkbox');
+        const textInput = item.querySelector('.todo-text');
+        return {
+            id: index,
+            text: textInput.value,
+            completed: checkbox.checked
+        };
+    });
+
+    data[currentDate].todos = todos;
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+}
+
+function loadTodos() {
+    const data = getData();
+    const dateData = data[currentDate] || { plan: [], real: [], todos: [], journalNote: '' };
+    const todos = dateData.todos || [];
+
+    const todoItems = document.querySelectorAll('.todo-item');
+    todoItems.forEach((item, index) => {
+        const checkbox = item.querySelector('.todo-checkbox');
+        const textInput = item.querySelector('.todo-text');
+
+        if (todos[index]) {
+            textInput.value = todos[index].text || '';
+            checkbox.checked = todos[index].completed || false;
+            if (checkbox.checked) {
+                item.classList.add('completed');
+            } else {
+                item.classList.remove('completed');
+            }
+        } else {
+            textInput.value = '';
+            checkbox.checked = false;
+            item.classList.remove('completed');
+        }
+    });
+}
+
+// Journal Note functionality
+function setupJournalNoteListener() {
+    journalNoteTextarea.addEventListener('input', () => {
+        clearTimeout(journalNoteSaveTimer);
+        journalNoteSaveTimer = setTimeout(() => {
+            saveJournalNote();
+        }, 500);
+    });
+}
+
+function saveJournalNote() {
+    const data = getData();
+    if (!data[currentDate]) {
+        data[currentDate] = { plan: [], real: [], todos: [], journalNote: '' };
+    }
+
+    data[currentDate].journalNote = journalNoteTextarea.value;
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+}
+
+function loadJournalNote() {
+    const data = getData();
+    const dateData = data[currentDate] || { plan: [], real: [], todos: [], journalNote: '' };
+    journalNoteTextarea.value = dateData.journalNote || '';
+}
+
+// Settings functionality
+function loadSettings() {
+    try {
+        const settings = JSON.parse(localStorage.getItem('app-settings') || '{}');
+        const exportFormat = settings.exportFormat || 'json';
+
+        const radioButtons = document.querySelectorAll('input[name="exportFormat"]');
+        radioButtons.forEach(radio => {
+            if (radio.value === exportFormat) {
+                radio.checked = true;
+            }
+        });
+    } catch (e) {
+        console.error('Error loading settings:', e);
+    }
+}
+
+function saveSettings() {
+    try {
+        const exportFormat = document.querySelector('input[name="exportFormat"]:checked').value;
+        const settings = { exportFormat };
+        localStorage.setItem('app-settings', JSON.stringify(settings));
+    } catch (e) {
+        console.error('Error saving settings:', e);
+    }
+}
+
+// Export functionality
+async function exportDay() {
+    try {
+        const settings = JSON.parse(localStorage.getItem('app-settings') || '{}');
+        const exportFormat = settings.exportFormat || 'json';
+
+        const data = getData();
+        const dateData = data[currentDate] || { plan: [], real: [], todos: [], journalNote: '' };
+
+        // Generate JSON
+        const jsonData = generateJSONExport(dateData);
+        downloadFile(`${currentDate}.json`, JSON.stringify(jsonData, null, 2), 'application/json');
+
+        // Generate Markdown if needed
+        if (exportFormat === 'both') {
+            const mdData = generateMarkdownExport(dateData);
+            downloadFile(`${currentDate}.md`, mdData, 'text/markdown');
+        }
+
+        showToast('Export 성공!', 'success');
+    } catch (e) {
+        console.error('Export error:', e);
+        showToast('Export 실패: ' + e.message, 'error');
+    }
+}
+
+function generateJSONExport(dateData) {
+    const date = new Date(currentDate + 'T00:00:00');
+    const dayOfWeek = DAYS_OF_WEEK[date.getDay()];
+
+    // Calculate statistics
+    const planTotalMinutes = calculateTotalMinutes(dateData.plan || []);
+    const realTotalMinutes = calculateTotalMinutes(dateData.real || []);
+    const todos = dateData.todos || [];
+    const completedTodos = todos.filter(t => t.completed).length;
+    const todoCompletionRate = todos.length > 0 ? completedTodos / todos.length : 0;
+
+    const planCategoryBreakdown = calculateCategoryBreakdown(dateData.plan || []);
+    const realCategoryBreakdown = calculateCategoryBreakdown(dateData.real || []);
+
+    return {
+        date: currentDate,
+        dayOfWeek: dayOfWeek,
+        plan: (dateData.plan || []).map(block => ({
+            start: block.startTime,
+            end: block.endTime,
+            title: block.title,
+            color: block.color,
+            category: COLOR_CATEGORIES[block.color] || '기타',
+            minutes: timeToMinutes(block.endTime) - timeToMinutes(block.startTime)
+        })),
+        real: (dateData.real || []).map(block => ({
+            start: block.startTime,
+            end: block.endTime,
+            title: block.title,
+            color: block.color,
+            category: COLOR_CATEGORIES[block.color] || '기타',
+            minutes: timeToMinutes(block.endTime) - timeToMinutes(block.startTime)
+        })),
+        todos: todos.map(t => ({
+            text: t.text,
+            completed: t.completed
+        })),
+        journalNote: dateData.journalNote || '',
+        stats: {
+            planTotalMinutes,
+            realTotalMinutes,
+            todoCompletionRate: Math.round(todoCompletionRate * 100) / 100,
+            categoryBreakdown: {
+                plan: planCategoryBreakdown,
+                real: realCategoryBreakdown
+            }
+        }
+    };
+}
+
+function generateMarkdownExport(dateData) {
+    const date = new Date(currentDate + 'T00:00:00');
+    const dayOfWeek = DAYS_OF_WEEK[date.getDay()];
+    const todos = dateData.todos || [];
+    const completedCount = todos.filter(t => t.completed && t.text.trim()).length;
+    const totalCount = todos.filter(t => t.text.trim()).length;
+
+    let md = `# ${currentDate} (${dayOfWeek})\n\n`;
+
+    // Todos
+    md += `## ✅ 오늘의 할 일\n`;
+    todos.forEach(todo => {
+        if (todo.text.trim()) {
+            md += `- [${todo.completed ? 'x' : ' '}] ${todo.text}\n`;
+        }
+    });
+    md += `\n(${completedCount}/${totalCount} 완료)\n\n`;
+
+    // Time table
+    md += `## 📅 PLAN vs REAL\n\n`;
+    md += `| 시간 | PLAN | REAL |\n`;
+    md += `|------|------|------|\n`;
+
+    const planBlocks = dateData.plan || [];
+    const realBlocks = dateData.real || [];
+    const maxBlocks = Math.max(planBlocks.length, realBlocks.length);
+
+    for (let i = 0; i < maxBlocks; i++) {
+        const planBlock = planBlocks[i];
+        const realBlock = realBlocks[i];
+        const planText = planBlock ? `${planBlock.startTime}-${planBlock.endTime} ${planBlock.title} (${timeToMinutes(planBlock.endTime) - timeToMinutes(planBlock.startTime)}분)` : '';
+        const realText = realBlock ? `${realBlock.startTime}-${realBlock.endTime} ${realBlock.title} (${timeToMinutes(realBlock.endTime) - timeToMinutes(realBlock.startTime)}분)` : '';
+        md += `| ${i === 0 ? '시간' : ''} | ${planText} | ${realText} |\n`;
+    }
+
+    md += `\n**카테고리별 시간**\n`;
+    const planBreakdown = calculateCategoryBreakdown(planBlocks);
+    const realBreakdown = calculateCategoryBreakdown(realBlocks);
+
+    Object.keys(COLOR_CATEGORIES).forEach(color => {
+        const category = COLOR_CATEGORIES[color];
+        const planMinutes = planBreakdown[category] || 0;
+        const realMinutes = realBreakdown[category] || 0;
+        const icon = color === '#E0E0E0' ? '🔘' : color === '#BAE1FF' ? '🔵' : color === '#BAFFC9' ? '🟢' : '🔴';
+        md += `- ${icon} ${category}: PLAN ${planMinutes}분 → REAL ${realMinutes}분\n`;
+    });
+
+    // Journal note
+    md += `\n## 📝 오늘의 메모\n`;
+    md += dateData.journalNote || '(메모 없음)';
+    md += `\n`;
+
+    return md;
+}
+
+function calculateTotalMinutes(blocks) {
+    return blocks.reduce((total, block) => {
+        return total + (timeToMinutes(block.endTime) - timeToMinutes(block.startTime));
+    }, 0);
+}
+
+function calculateCategoryBreakdown(blocks) {
+    const breakdown = {};
+    blocks.forEach(block => {
+        const category = COLOR_CATEGORIES[block.color] || '기타';
+        const minutes = timeToMinutes(block.endTime) - timeToMinutes(block.startTime);
+        breakdown[category] = (breakdown[category] || 0) + minutes;
+    });
+    return breakdown;
+}
+
+function downloadFile(filename, content, mimeType) {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function showToast(message, type = 'success') {
+    toast.textContent = message;
+    toast.className = 'toast show ' + type;
+
+    setTimeout(() => {
+        toast.className = 'toast';
+    }, 3000);
+}
+
+// Keyboard shortcuts
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Ctrl/Cmd + E: Export
+        if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+            e.preventDefault();
+            exportDay();
+        }
+
+        // Ctrl/Cmd + ,: Settings
+        if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+            e.preventDefault();
+            openSettingsModal();
+        }
+
+        // Arrow keys: Navigate dates
+        if (e.key === 'ArrowLeft' && !e.target.matches('input, textarea')) {
+            e.preventDefault();
+            document.querySelector('.btn-prev').click();
+        }
+
+        if (e.key === 'ArrowRight' && !e.target.matches('input, textarea')) {
+            e.preventDefault();
+            document.querySelector('.btn-next').click();
+        }
+
+        // Escape: Close modals
+        if (e.key === 'Escape') {
+            if (blockModal.classList.contains('active')) {
+                closeBlockModal();
+            }
+            if (confirmModal.classList.contains('active')) {
+                closeConfirmModal();
+            }
+            if (settingsModal.classList.contains('active')) {
+                closeSettingsModal();
+            }
+        }
+
+        // Delete: Delete selected block (would need implementation)
+    });
+}
+
+// Settings modal
+function openSettingsModal() {
+    settingsModal.classList.add('active');
+}
+
+function closeSettingsModal() {
+    saveSettings();
+    settingsModal.classList.remove('active');
 }
 
 // Initialize app
