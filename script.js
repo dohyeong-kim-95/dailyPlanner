@@ -927,17 +927,21 @@ function cleanOldData() {
 
 // Date navigation handlers
 function navigateToPreviousDay() {
+    console.log('navigateToPreviousDay called, currentDate before:', currentDate);
     const date = new Date(currentDate + 'T00:00:00');
     date.setDate(date.getDate() - 1);
     currentDate = date.toISOString().split('T')[0];
+    console.log('navigateToPreviousDay, currentDate after:', currentDate);
     updateDateDisplay();
     loadData();
 }
 
 function navigateToNextDay() {
+    console.log('navigateToNextDay called, currentDate before:', currentDate);
     const date = new Date(currentDate + 'T00:00:00');
     date.setDate(date.getDate() + 1);
     currentDate = date.toISOString().split('T')[0];
+    console.log('navigateToNextDay, currentDate after:', currentDate);
     updateDateDisplay();
     loadData();
 }
@@ -947,12 +951,16 @@ function setupDateNavigation() {
     const btnPrev = document.querySelector('.btn-prev');
     const btnNext = document.querySelector('.btn-next');
 
+    console.log('setupDateNavigation called, btnPrev:', btnPrev, 'btnNext:', btnNext);
+
     if (btnPrev) {
         btnPrev.onclick = navigateToPreviousDay;
+        console.log('btnPrev.onclick set to navigateToPreviousDay');
     }
 
     if (btnNext) {
         btnNext.onclick = navigateToNextDay;
+        console.log('btnNext.onclick set to navigateToNextDay');
     }
 }
 
