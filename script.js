@@ -925,29 +925,34 @@ function cleanOldData() {
     }
 }
 
+// Date navigation handlers
+function navigateToPreviousDay() {
+    const date = new Date(currentDate + 'T00:00:00');
+    date.setDate(date.getDate() - 1);
+    currentDate = date.toISOString().split('T')[0];
+    updateDateDisplay();
+    loadData();
+}
+
+function navigateToNextDay() {
+    const date = new Date(currentDate + 'T00:00:00');
+    date.setDate(date.getDate() + 1);
+    currentDate = date.toISOString().split('T')[0];
+    updateDateDisplay();
+    loadData();
+}
+
 // Setup date navigation
 function setupDateNavigation() {
     const btnPrev = document.querySelector('.btn-prev');
     const btnNext = document.querySelector('.btn-next');
 
     if (btnPrev) {
-        btnPrev.addEventListener('click', () => {
-            const date = new Date(currentDate + 'T00:00:00');
-            date.setDate(date.getDate() - 1);
-            currentDate = date.toISOString().split('T')[0];
-            updateDateDisplay();
-            loadData();
-        });
+        btnPrev.onclick = navigateToPreviousDay;
     }
 
     if (btnNext) {
-        btnNext.addEventListener('click', () => {
-            const date = new Date(currentDate + 'T00:00:00');
-            date.setDate(date.getDate() + 1);
-            currentDate = date.toISOString().split('T')[0];
-            updateDateDisplay();
-            loadData();
-        });
+        btnNext.onclick = navigateToNextDay;
     }
 }
 
@@ -1312,12 +1317,12 @@ function setupKeyboardShortcuts() {
         // Arrow keys: Navigate dates
         if (e.key === 'ArrowLeft' && !e.target.matches('input, textarea')) {
             e.preventDefault();
-            document.querySelector('.btn-prev').click();
+            navigateToPreviousDay();
         }
 
         if (e.key === 'ArrowRight' && !e.target.matches('input, textarea')) {
             e.preventDefault();
-            document.querySelector('.btn-next').click();
+            navigateToNextDay();
         }
 
         // Escape: Close modals
