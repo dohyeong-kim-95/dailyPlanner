@@ -1,10 +1,41 @@
 // Constants
-const HOURS = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 0, 1];
+const HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]; // 7AM - 8PM
 const MINUTES = [0, 10, 20, 30, 40, 50];
-const COLORS = ['#FFB3BA', '#BAE1FF', '#BAFFC9', '#E0E0E0'];
+
+// Block Colors (Time Categories)
+const BLOCK_COLORS = {
+    useless: '#FFB3BA',  // Red - Useless time
+    work: '#BAE1FF',     // Blue - Work
+    rest: '#BAFFC9',     // Green - Rest
+    nonwork: '#E0E0E0'   // Gray - Non-work (commute, etc.)
+};
+const COLORS = [BLOCK_COLORS.useless, BLOCK_COLORS.work, BLOCK_COLORS.rest, BLOCK_COLORS.nonwork];
+
+// TODO Priority Colors (Eisenhower Matrix) - Soft pastel colors
+const TODO_COLORS = {
+    urgentImportant: '#F8B4B4',      // Soft Red - Urgent & Important
+    urgentNotImportant: '#FDE68A',   // Soft Yellow - Urgent & Not Important
+    notUrgentImportant: '#A7F3D0',   // Soft Green/Mint - Not Urgent & Important
+    notUrgentNotImportant: '#E5E7EB' // Soft Gray - Not Urgent & Not Important
+};
+const TODO_COLOR_CYCLE = [
+    TODO_COLORS.urgentImportant,
+    TODO_COLORS.urgentNotImportant,
+    TODO_COLORS.notUrgentImportant,
+    TODO_COLORS.notUrgentNotImportant
+];
+const MAX_TODO_ITEMS = 7;
+
+// Get current date in KST (Korea Standard Time)
+function getKSTDateString(date = new Date()) {
+    const kstOffset = 9 * 60; // KST is UTC+9
+    const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+    const kstDate = new Date(utc + (kstOffset * 60000));
+    return kstDate.toISOString().split('T')[0];
+}
 
 // State
-let currentDate = new Date().toISOString().split('T')[0];
+let currentDate = getKSTDateString();
 let selectedColor = COLORS[0];
 let selecting = false;
 let startSlot = null;
@@ -29,12 +60,109 @@ const btnConfirmNo = document.getElementById('btnConfirmNo');
 
 // Initialize
 function init() {
+    cleanOldData(); // Remove data from previous months
     currentDateEl.textContent = currentDate;
     createTimeGrid(planContent, 'plan');
     createTimeGrid(realContent, 'real');
     setupColorPicker();
     setupEventListeners();
+    setupTodoEventListeners();
+    setupNotesEventListeners();
+    setupExportEventListeners();
+    setupKeyboardShortcuts();
+    startClock();
     loadData();
+}
+
+// Clean old data (keep only current month)
+function cleanOldData() {
+    const data = getData();
+    const currentMonth = getKSTDateString().substring(0, 7); // "YYYY-MM"
+
+    let deletedCount = 0;
+    const keysToDelete = [];
+
+    for (const key in data) {
+        // Skip global notes and non-date keys
+        if (key.startsWith('_')) continue;
+
+        // Check if key is a date (YYYY-MM-DD format)
+        if (/^\d{4}-\d{2}-\d{2}$/.test(key)) {
+            const keyMonth = key.substring(0, 7);
+            if (keyMonth !== currentMonth) {
+                keysToDelete.push(key);
+                deletedCount++;
+            }
+        }
+    }
+
+    if (deletedCount > 0) {
+        keysToDelete.forEach(key => delete data[key]);
+        localStorage.setItem('dailyPlanner', JSON.stringify(data));
+        console.log(`Cleaned ${deletedCount} old entries (keeping only ${currentMonth})`);
+    }
+}
+
+// Clock display
+function startClock() {
+    const clockEl = document.getElementById('headerClock');
+    if (!clockEl) return;
+
+    function updateClock() {
+        const now = new Date();
+        // Get KST time
+        const kstOffset = 9 * 60;
+        const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+        const kstTime = new Date(utc + (kstOffset * 60000));
+
+        const hours = String(kstTime.getHours()).padStart(2, '0');
+        const minutes = String(kstTime.getMinutes()).padStart(2, '0');
+        const seconds = String(kstTime.getSeconds()).padStart(2, '0');
+        clockEl.textContent = `${hours}:${minutes}:${seconds}`;
+    }
+
+    updateClock();
+    setInterval(updateClock, 1000);
+}
+
+// Setup keyboard shortcuts
+function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', (e) => {
+        // Ctrl + S: Export daily (prevent browser save)
+        if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            exportDailyCSV();
+            return;
+        }
+
+        // Ctrl + Left Arrow: Previous day
+        if (e.ctrlKey && e.key === 'ArrowLeft') {
+            e.preventDefault();
+            goToPreviousDay();
+            return;
+        }
+
+        // Ctrl + Right Arrow: Next day
+        if (e.ctrlKey && e.key === 'ArrowRight') {
+            e.preventDefault();
+            goToNextDay();
+            return;
+        }
+
+        // Ctrl + T: Add TODO
+        if (e.ctrlKey && e.key === 't') {
+            e.preventDefault();
+            openTodoModal();
+            return;
+        }
+
+        // Ctrl + B: Backup all data
+        if (e.ctrlKey && e.key === 'b') {
+            e.preventDefault();
+            backupAllData();
+            return;
+        }
+    });
 }
 
 // Create time grid
@@ -82,6 +210,12 @@ function setupColorPicker() {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Date navigation
+    const btnPrev = document.querySelector('.btn-prev');
+    const btnNext = document.querySelector('.btn-next');
+    if (btnPrev) btnPrev.addEventListener('click', goToPreviousDay);
+    if (btnNext) btnNext.addEventListener('click', goToNextDay);
+
     // Mouse events for desktop
     document.addEventListener('mousedown', handleMouseDown);
     document.addEventListener('mousemove', handleMouseMove);
@@ -158,7 +292,7 @@ function handleMouseUp(e) {
     if (startSlot && endSlot) {
         const { startTime, endTime } = getTimeRange();
         if (checkOverlap(currentType, startTime, endTime)) {
-            alert('이미 블록이 존재하는 시간대입니다.');
+            alert('A block already exists in this time range.');
             clearSelection();
             resetSelection();
             return;
@@ -187,7 +321,7 @@ function handleTouchStart(e) {
         if (slot.dataset.type === currentType) {
             const { startTime, endTime } = getTimeRange();
             if (checkOverlap(currentType, startTime, endTime)) {
-                alert('이미 블록이 존재하는 시간대입니다.');
+                alert('A block already exists in this time range.');
                 clearSelection();
                 resetTouchSelection();
                 return;
@@ -277,6 +411,15 @@ function openBlockModal() {
     blockTitleInput.value = '';
     blockModal.classList.add('active');
     blockTitleInput.focus();
+
+    // Handle Enter/Escape keys
+    blockTitleInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            saveBlock();
+        } else if (e.key === 'Escape') {
+            closeBlockModal();
+        }
+    };
 }
 
 function closeBlockModal() {
@@ -304,7 +447,7 @@ function closeConfirmModal() {
 function saveBlock() {
     const title = blockTitleInput.value.trim();
     if (!title) {
-        alert('업무명을 입력해주세요.');
+        alert('Please enter a task name.');
         return;
     }
 
@@ -341,9 +484,7 @@ function checkOverlap(type, startTime, endTime) {
 // Time conversion
 function timeToMinutes(time) {
     const [hour, minute] = time.split(':').map(Number);
-    // Handle next day (00:00 - 01:50)
-    const adjustedHour = hour < 5 ? hour + 24 : hour;
-    return adjustedHour * 60 + minute;
+    return hour * 60 + minute;
 }
 
 // Split block into multiple segments by hour boundaries
@@ -351,12 +492,8 @@ function splitBlockByHour(block) {
     const [startHour, startMinute] = block.startTime.split(':').map(Number);
     const [endHour, endMinute] = block.endTime.split(':').map(Number);
 
-    // Adjust hours for next day (00:00 - 01:50)
-    const adjustedStartHour = startHour < 5 ? startHour + 24 : startHour;
-    const adjustedEndHour = endHour < 5 ? endHour + 24 : endHour;
-
     // If same hour, no split needed
-    if (adjustedStartHour === adjustedEndHour) {
+    if (startHour === endHour) {
         return [{
             ...block,
             segmentStart: block.startTime,
@@ -366,25 +503,25 @@ function splitBlockByHour(block) {
 
     // Multiple hours - split into segments
     const segments = [];
-    let currentHour = adjustedStartHour;
+    let currentHour = startHour;
     let currentMinute = startMinute;
 
-    while (currentHour < adjustedEndHour || (currentHour === adjustedEndHour && currentMinute < endMinute)) {
-        const segmentStart = `${String(currentHour % 24).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
+    while (currentHour < endHour || (currentHour === endHour && currentMinute < endMinute)) {
+        const segmentStart = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')}`;
 
         // Move to next hour boundary or end time
         let nextHour = currentHour;
         let nextMinute = 0;
 
-        if (currentHour < adjustedEndHour) {
+        if (currentHour < endHour) {
             nextHour = currentHour + 1;
             nextMinute = 0;
         } else {
-            nextHour = adjustedEndHour;
+            nextHour = endHour;
             nextMinute = endMinute;
         }
 
-        const segmentEnd = `${String(nextHour % 24).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`;
+        const segmentEnd = `${String(nextHour).padStart(2, '0')}:${String(nextMinute).padStart(2, '0')}`;
 
         segments.push({
             ...block,
@@ -410,13 +547,17 @@ function getData() {
         const data = localStorage.getItem('dailyPlanner');
         const parsed = data ? JSON.parse(data) : {};
 
-        // Validate data structure for current date
+        // Validate and ensure data structure for current date
         if (parsed[currentDate]) {
             if (!parsed[currentDate].plan || !Array.isArray(parsed[currentDate].plan) ||
                 !parsed[currentDate].real || !Array.isArray(parsed[currentDate].real)) {
                 console.warn(`Invalid data structure for ${currentDate}, clearing date data`);
                 delete parsed[currentDate];
                 localStorage.setItem('dailyPlanner', JSON.stringify(parsed));
+            }
+            // Ensure todo array exists
+            if (!parsed[currentDate].todo || !Array.isArray(parsed[currentDate].todo)) {
+                parsed[currentDate].todo = [];
             }
         }
 
@@ -453,10 +594,10 @@ function saveData() {
             const data = getData();
             delete data[currentDate];
             localStorage.setItem('dailyPlanner', JSON.stringify(data));
-            alert(`데이터 저장 오류가 발생하여 ${currentDate}의 데이터를 삭제했습니다.`);
+            alert(`Data save error occurred. Data for ${currentDate} has been deleted.`);
         } catch (recoveryError) {
             console.error('Failed to save data:', recoveryError);
-            alert('데이터 저장에 실패했습니다. 브라우저 저장소가 가득 찼을 수 있습니다.');
+            alert('Failed to save data. Browser storage may be full.');
         }
     }
 }
@@ -464,7 +605,10 @@ function saveData() {
 function addBlockToData(type, block) {
     const data = getData();
     if (!data[currentDate]) {
-        data[currentDate] = { plan: [], real: [] };
+        data[currentDate] = { plan: [], real: [], todo: [] };
+    }
+    if (!data[currentDate].todo) {
+        data[currentDate].todo = [];
     }
     data[currentDate][type].push(block);
     localStorage.setItem('dailyPlanner', JSON.stringify(data));
@@ -472,6 +616,9 @@ function addBlockToData(type, block) {
 
 function loadData() {
     renderBlocks();
+    renderTodoList();
+    renderDailySummary();
+    renderNotes();
 }
 
 // Render blocks
@@ -481,6 +628,7 @@ function renderBlocks() {
 
     renderBlocksForType('plan', dateData.plan);
     renderBlocksForType('real', dateData.real);
+    renderDailySummary();
 }
 
 function renderBlocksForType(type, blocks) {
@@ -524,7 +672,7 @@ function createBlockElement(container, type, block) {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'copy-btn';
         copyBtn.textContent = '→';
-        copyBtn.title = 'REAL로 복사';
+        copyBtn.title = 'Copy to REAL';
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             copyBlock(block, type);
@@ -601,7 +749,7 @@ function setupBlockEventListeners(blockEl, block) {
 
 // Delete block
 function deleteBlock(blockEl, block) {
-    openConfirmModal('삭제하시겠습니까?', () => {
+    openConfirmModal('Delete this block?', () => {
         const type = blockEl.dataset.type;
         removeBlockFromData(type, block.id);
         saveData();
@@ -723,9 +871,9 @@ function updateBlockInData(type, updatedBlock) {
 // Copy block from one type to another
 function copyBlock(block, fromType) {
     const toType = fromType === 'plan' ? 'real' : 'plan';
-    const direction = fromType === 'plan' ? 'REAL로' : 'PLAN으로';
+    const direction = fromType === 'plan' ? 'REAL' : 'PLAN';
 
-    openConfirmModal(`정말로 ${direction} 복사하시겠습니까?`, () => {
+    openConfirmModal(`Copy this block to ${direction}?`, () => {
         const data = getData();
         if (!data[currentDate]) {
             data[currentDate] = { plan: [], real: [] };
@@ -763,11 +911,11 @@ function copyAllBlocks() {
     const planBlocks = data[currentDate]?.plan || [];
 
     if (planBlocks.length === 0) {
-        alert('복사할 PLAN 블록이 없습니다.');
+        alert('No PLAN blocks to copy.');
         return;
     }
 
-    openConfirmModal('PLAN의 모든 블록을 REAL로 복사하시겠습니까?\n(기존 REAL 블록은 모두 삭제됩니다)', () => {
+    openConfirmModal('Copy all PLAN blocks to REAL?\n(Existing REAL blocks will be deleted)', () => {
         if (!data[currentDate]) {
             data[currentDate] = { plan: [], real: [] };
         }
@@ -798,12 +946,12 @@ function deleteAllBlocks(type) {
     const blocks = data[currentDate]?.[type] || [];
 
     if (blocks.length === 0) {
-        alert('삭제할 블록이 없습니다.');
+        alert('No blocks to delete.');
         return;
     }
 
     const typeName = type === 'plan' ? 'PLAN' : 'REAL';
-    openConfirmModal(`${typeName}의 모든 블록을 삭제하시겠습니까?`, () => {
+    openConfirmModal(`Delete all ${typeName} blocks?`, () => {
         if (!data[currentDate]) {
             data[currentDate] = { plan: [], real: [] };
         }
@@ -848,6 +996,847 @@ function calculateBlockPosition(startTime, endTime) {
     const height = rowHeight - 4;
 
     return { top, left, width, height };
+}
+
+// ============================================
+// DAILY SUMMARY FUNCTIONS
+// ============================================
+
+// Calculate summary for a block type (plan or real)
+function calculateSummaryForType(type) {
+    const data = getData();
+    const dayData = data[currentDate];
+    const blocks = dayData?.[type] || [];
+
+    const summary = {
+        work: 0,      // Blue - #BAE1FF
+        rest: 0,      // Green - #BAFFC9
+        nonwork: 0,   // Gray - #E0E0E0
+        useless: 0    // Red - #FFB3BA
+    };
+
+    blocks.forEach(block => {
+        const startMinutes = timeToMinutes(block.startTime);
+        const endMinutes = timeToMinutes(block.endTime);
+        const duration = endMinutes - startMinutes;
+
+        switch (block.color) {
+            case BLOCK_COLORS.work:
+                summary.work += duration;
+                break;
+            case BLOCK_COLORS.rest:
+                summary.rest += duration;
+                break;
+            case BLOCK_COLORS.nonwork:
+                summary.nonwork += duration;
+                break;
+            case BLOCK_COLORS.useless:
+                summary.useless += duration;
+                break;
+        }
+    });
+
+    return summary;
+}
+
+// Format minutes to compact format "Xh Ym" or "Xh" or "Ym"
+function formatDuration(minutes) {
+    if (minutes === 0) return '0m';
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours === 0) return `${mins}m`;
+    if (mins === 0) return `${hours}h`;
+    return `${hours}h${mins}m`;
+}
+
+// Format difference with sign
+function formatDiff(diff) {
+    if (diff === 0) return '';
+    const sign = diff > 0 ? '+' : '';
+    return `(${sign}${formatDuration(Math.abs(diff))})`;
+}
+
+// Render daily summary with PLAN vs REAL comparison
+function renderDailySummary() {
+    const summaryEl = document.getElementById('dailySummary');
+    if (!summaryEl) return;
+
+    const plan = calculateSummaryForType('plan');
+    const real = calculateSummaryForType('real');
+
+    const categories = [
+        { key: 'work', label: 'Work', color: BLOCK_COLORS.work },
+        { key: 'rest', label: 'Rest', color: BLOCK_COLORS.rest },
+        { key: 'useless', label: 'Useless', color: BLOCK_COLORS.useless }
+    ];
+
+    let html = '';
+    categories.forEach(cat => {
+        const realVal = real[cat.key];
+        const diff = realVal - plan[cat.key];
+        const diffClass = diff > 0 ? 'diff-positive' : (diff < 0 ? 'diff-negative' : '');
+        html += `
+            <span class="summary-item">
+                <span class="summary-dot" style="background:${cat.color}"></span>
+                ${cat.label}: ${formatDuration(realVal)}
+                <span class="summary-diff ${diffClass}">${formatDiff(diff)}</span>
+            </span>
+        `;
+    });
+
+    summaryEl.innerHTML = html;
+}
+
+// ============================================
+// EXPORT FUNCTIONS
+// ============================================
+
+// Download file helper
+function downloadFile(content, filename, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Get color category name
+function getColorCategory(color) {
+    switch (color) {
+        case BLOCK_COLORS.work: return 'Work';
+        case BLOCK_COLORS.rest: return 'Rest';
+        case BLOCK_COLORS.nonwork: return 'Non-work';
+        case BLOCK_COLORS.useless: return 'Useless';
+        default: return 'Unknown';
+    }
+}
+
+// Export daily data as CSV
+function exportDailyCSV() {
+    const data = getData();
+    const dayData = data[currentDate] || { plan: [], real: [], todo: [] };
+
+    let csv = 'Type,Start,End,Title,Category\n';
+
+    // Add PLAN blocks
+    dayData.plan.forEach(block => {
+        csv += `PLAN,${block.startTime},${block.endTime},"${block.title.replace(/"/g, '""')}",${getColorCategory(block.color)}\n`;
+    });
+
+    // Add REAL blocks
+    dayData.real.forEach(block => {
+        csv += `REAL,${block.startTime},${block.endTime},"${block.title.replace(/"/g, '""')}",${getColorCategory(block.color)}\n`;
+    });
+
+    // Add TODO section
+    csv += '\nTODO Status,Title,Priority\n';
+    dayData.todo.forEach(todo => {
+        const status = todo.done ? 'DONE' : 'TODO';
+        const priority = getPriorityName(todo.color);
+        csv += `${status},"${todo.title.replace(/"/g, '""')}",${priority}\n`;
+    });
+
+    downloadFile(csv, `daily-planner-${currentDate}.csv`, 'text/csv');
+}
+
+// Get priority name from color
+function getPriorityName(color) {
+    switch (color) {
+        case TODO_COLORS.urgentImportant: return 'Urgent+Important';
+        case TODO_COLORS.urgentNotImportant: return 'Urgent';
+        case TODO_COLORS.notUrgentImportant: return 'Important';
+        case TODO_COLORS.notUrgentNotImportant: return 'Neither';
+        default: return 'Unknown';
+    }
+}
+
+// Export daily data as JSON
+function exportDailyJSON() {
+    const data = getData();
+    const dayData = data[currentDate] || { plan: [], real: [], todo: [] };
+
+    const exportData = {
+        date: currentDate,
+        plan: dayData.plan,
+        real: dayData.real,
+        todo: dayData.todo,
+        summary: {
+            plan: calculateSummaryForType('plan'),
+            real: calculateSummaryForType('real')
+        }
+    };
+
+    const json = JSON.stringify(exportData, null, 2);
+    downloadFile(json, `daily-planner-${currentDate}.json`, 'application/json');
+}
+
+// Get week dates (Monday to Sunday containing current date)
+function getCurrentWeekDates() {
+    const date = new Date(currentDate);
+    const day = date.getDay();
+    const diff = date.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
+
+    const monday = new Date(date);
+    monday.setDate(diff);
+
+    const dates = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        dates.push(d.toISOString().split('T')[0]);
+    }
+    return dates;
+}
+
+// Calculate summary for a specific date
+function calculateSummaryForDate(date) {
+    const data = getData();
+    const dayData = data[date];
+
+    const result = {
+        plan: { work: 0, rest: 0, nonwork: 0, useless: 0 },
+        real: { work: 0, rest: 0, nonwork: 0, useless: 0 }
+    };
+
+    if (!dayData) return result;
+
+    ['plan', 'real'].forEach(type => {
+        const blocks = dayData[type] || [];
+        blocks.forEach(block => {
+            const duration = timeToMinutes(block.endTime) - timeToMinutes(block.startTime);
+            switch (block.color) {
+                case BLOCK_COLORS.work: result[type].work += duration; break;
+                case BLOCK_COLORS.rest: result[type].rest += duration; break;
+                case BLOCK_COLORS.nonwork: result[type].nonwork += duration; break;
+                case BLOCK_COLORS.useless: result[type].useless += duration; break;
+            }
+        });
+    });
+
+    return result;
+}
+
+// Export weekly data as CSV
+function exportWeeklyCSV() {
+    const dates = getCurrentWeekDates();
+
+    let csv = 'Date,Plan_Work,Plan_Rest,Plan_Nonwork,Plan_Useless,Real_Work,Real_Rest,Real_Nonwork,Real_Useless\n';
+
+    dates.forEach(date => {
+        const summary = calculateSummaryForDate(date);
+        csv += `${date},${summary.plan.work},${summary.plan.rest},${summary.plan.nonwork},${summary.plan.useless},`;
+        csv += `${summary.real.work},${summary.real.rest},${summary.real.nonwork},${summary.real.useless}\n`;
+    });
+
+    // Add totals
+    let totals = { plan: { work: 0, rest: 0, nonwork: 0, useless: 0 }, real: { work: 0, rest: 0, nonwork: 0, useless: 0 } };
+    dates.forEach(date => {
+        const summary = calculateSummaryForDate(date);
+        ['plan', 'real'].forEach(type => {
+            ['work', 'rest', 'nonwork', 'useless'].forEach(cat => {
+                totals[type][cat] += summary[type][cat];
+            });
+        });
+    });
+
+    csv += `TOTAL,${totals.plan.work},${totals.plan.rest},${totals.plan.nonwork},${totals.plan.useless},`;
+    csv += `${totals.real.work},${totals.real.rest},${totals.real.nonwork},${totals.real.useless}\n`;
+
+    const weekStart = dates[0];
+    downloadFile(csv, `daily-planner-week-${weekStart}.csv`, 'text/csv');
+}
+
+// Export weekly data as JSON
+function exportWeeklyJSON() {
+    const dates = getCurrentWeekDates();
+    const data = getData();
+
+    const exportData = {
+        weekStart: dates[0],
+        weekEnd: dates[6],
+        days: {}
+    };
+
+    dates.forEach(date => {
+        const dayData = data[date] || { plan: [], real: [], todo: [] };
+        exportData.days[date] = {
+            plan: dayData.plan,
+            real: dayData.real,
+            todo: dayData.todo,
+            summary: calculateSummaryForDate(date)
+        };
+    });
+
+    const json = JSON.stringify(exportData, null, 2);
+    downloadFile(json, `daily-planner-week-${dates[0]}.json`, 'application/json');
+}
+
+// Open export modal
+function openExportModal() {
+    const exportModal = document.getElementById('exportModal');
+    if (exportModal) {
+        exportModal.classList.add('active');
+    }
+}
+
+// Close export modal
+function closeExportModal() {
+    const exportModal = document.getElementById('exportModal');
+    if (exportModal) {
+        exportModal.classList.remove('active');
+    }
+}
+
+// Export for LLM (Markdown report)
+function exportForLLM() {
+    const dates = getCurrentWeekDates();
+    const data = getData();
+
+    let md = `# Weekly Time Report\n`;
+    md += `**Week:** ${dates[0]} to ${dates[6]}\n`;
+    md += `**Generated:** ${getKSTDateString()}\n\n`;
+
+    // Global notes
+    if (data._globalNotes) {
+        md += `## Notes & Reminders\n${data._globalNotes}\n\n`;
+    }
+
+    // Weekly summary table
+    md += `## Weekly Summary (in minutes)\n`;
+    md += `| Date | Plan Work | Plan Rest | Real Work | Real Rest | Real Useless |\n`;
+    md += `|------|-----------|-----------|-----------|-----------|-------------|\n`;
+
+    let weekTotals = { planWork: 0, planRest: 0, realWork: 0, realRest: 0, realUseless: 0 };
+
+    dates.forEach(date => {
+        const summary = calculateSummaryForDate(date);
+        md += `| ${date} | ${summary.plan.work} | ${summary.plan.rest} | ${summary.real.work} | ${summary.real.rest} | ${summary.real.useless} |\n`;
+        weekTotals.planWork += summary.plan.work;
+        weekTotals.planRest += summary.plan.rest;
+        weekTotals.realWork += summary.real.work;
+        weekTotals.realRest += summary.real.rest;
+        weekTotals.realUseless += summary.real.useless;
+    });
+
+    md += `| **TOTAL** | ${weekTotals.planWork} | ${weekTotals.planRest} | ${weekTotals.realWork} | ${weekTotals.realRest} | ${weekTotals.realUseless} |\n\n`;
+
+    // Convert to hours for readability
+    md += `## Weekly Totals (hours)\n`;
+    md += `- **Planned Work:** ${formatDuration(weekTotals.planWork)}\n`;
+    md += `- **Actual Work:** ${formatDuration(weekTotals.realWork)} (${formatDiff(weekTotals.realWork - weekTotals.planWork)})\n`;
+    md += `- **Planned Rest:** ${formatDuration(weekTotals.planRest)}\n`;
+    md += `- **Actual Rest:** ${formatDuration(weekTotals.realRest)} (${formatDiff(weekTotals.realRest - weekTotals.planRest)})\n`;
+    md += `- **Useless Time:** ${formatDuration(weekTotals.realUseless)}\n\n`;
+
+    // Daily details
+    md += `## Daily Details\n\n`;
+    dates.forEach(date => {
+        const dayData = data[date];
+        if (!dayData) return;
+
+        md += `### ${date}\n`;
+
+        // Tasks done
+        const doneTasks = (dayData.todo || []).filter(t => t.done);
+        if (doneTasks.length > 0) {
+            md += `**Completed:**\n`;
+            doneTasks.forEach(t => md += `- ${t.title}\n`);
+        }
+
+        // Tasks not done
+        const pendingTasks = (dayData.todo || []).filter(t => !t.done);
+        if (pendingTasks.length > 0) {
+            md += `**Not Completed:**\n`;
+            pendingTasks.forEach(t => md += `- ${t.title}\n`);
+        }
+
+        md += `\n`;
+    });
+
+    downloadFile(md, `time-report-${dates[0]}.md`, 'text/markdown');
+}
+
+// Backup all data
+function backupAllData() {
+    const data = getData();
+    const backup = {
+        version: '2.0',
+        exportDate: getKSTDateString(),
+        data: data
+    };
+    const json = JSON.stringify(backup, null, 2);
+    downloadFile(json, `daily-planner-backup-${getKSTDateString()}.json`, 'application/json');
+}
+
+// Import backup data
+function importBackup(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const backup = JSON.parse(e.target.result);
+
+            // Validate backup structure
+            if (!backup.data) {
+                alert('Invalid backup file format.');
+                return;
+            }
+
+            openConfirmModal('This will overwrite all existing data. Continue?', () => {
+                localStorage.setItem('dailyPlanner', JSON.stringify(backup.data));
+                loadData();
+                alert('Backup restored successfully!');
+            });
+        } catch (error) {
+            alert('Error reading backup file: ' + error.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+// Setup export event listeners
+function setupExportEventListeners() {
+    const exportBtn = document.getElementById('exportBtn');
+    const btnExportDailyCSV = document.getElementById('btnExportDailyCSV');
+    const btnExportDailyJSON = document.getElementById('btnExportDailyJSON');
+    const btnExportWeeklyCSV = document.getElementById('btnExportWeeklyCSV');
+    const btnExportWeeklyJSON = document.getElementById('btnExportWeeklyJSON');
+    const btnExportLLM = document.getElementById('btnExportLLM');
+    const btnBackup = document.getElementById('btnBackup');
+    const importFileInput = document.getElementById('importFile');
+    const btnExportClose = document.getElementById('btnExportClose');
+    const exportModal = document.getElementById('exportModal');
+
+    if (exportBtn) exportBtn.addEventListener('click', openExportModal);
+    if (btnExportDailyCSV) btnExportDailyCSV.addEventListener('click', () => { exportDailyCSV(); closeExportModal(); });
+    if (btnExportDailyJSON) btnExportDailyJSON.addEventListener('click', () => { exportDailyJSON(); closeExportModal(); });
+    if (btnExportWeeklyCSV) btnExportWeeklyCSV.addEventListener('click', () => { exportWeeklyCSV(); closeExportModal(); });
+    if (btnExportWeeklyJSON) btnExportWeeklyJSON.addEventListener('click', () => { exportWeeklyJSON(); closeExportModal(); });
+    if (btnExportLLM) btnExportLLM.addEventListener('click', () => { exportForLLM(); closeExportModal(); });
+    if (btnBackup) btnBackup.addEventListener('click', () => { backupAllData(); closeExportModal(); });
+    if (importFileInput) {
+        importFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                importBackup(e.target.files[0]);
+                e.target.value = ''; // Reset input
+                closeExportModal();
+            }
+        });
+    }
+    if (btnExportClose) btnExportClose.addEventListener('click', closeExportModal);
+    if (exportModal) {
+        exportModal.addEventListener('click', (e) => {
+            if (e.target === exportModal) closeExportModal();
+        });
+    }
+}
+
+// ============================================
+// NOTES FUNCTIONS
+// ============================================
+
+// Setup notes event listeners
+function setupNotesEventListeners() {
+    const notesTextarea = document.getElementById('notesTextarea');
+    if (!notesTextarea) return;
+
+    // Auto-save on input with debounce
+    let saveTimeout;
+    notesTextarea.addEventListener('input', () => {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            saveNotes(notesTextarea.value);
+        }, 500);
+    });
+
+    // Save on blur immediately
+    notesTextarea.addEventListener('blur', () => {
+        clearTimeout(saveTimeout);
+        saveNotes(notesTextarea.value);
+    });
+}
+
+// Save notes to localStorage (global, not per-date)
+function saveNotes(text) {
+    const data = getData();
+    data._globalNotes = text;
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+}
+
+// Render notes (global)
+function renderNotes() {
+    const notesTextarea = document.getElementById('notesTextarea');
+    if (!notesTextarea) return;
+
+    const data = getData();
+    notesTextarea.value = data._globalNotes || '';
+}
+
+// ============================================
+// DATE NAVIGATION FUNCTIONS
+// ============================================
+
+function goToPreviousDay() {
+    const date = new Date(currentDate);
+    date.setDate(date.getDate() - 1);
+    currentDate = date.toISOString().split('T')[0];
+    currentDateEl.textContent = currentDate;
+    loadData();
+}
+
+function goToNextDay() {
+    const date = new Date(currentDate);
+    date.setDate(date.getDate() + 1);
+    currentDate = date.toISOString().split('T')[0];
+    currentDateEl.textContent = currentDate;
+    loadData();
+}
+
+// ============================================
+// TODO LIST FUNCTIONS
+// ============================================
+
+// Setup TODO event listeners
+function setupTodoEventListeners() {
+    const addTodoBtn = document.getElementById('addTodoBtn');
+    const carryTodoBtn = document.getElementById('carryTodoBtn');
+    const todoModal = document.getElementById('todoModal');
+    const todoTitleInput = document.getElementById('todoTitle');
+    const btnTodoSave = document.getElementById('btnTodoSave');
+    const btnTodoCancel = document.getElementById('btnTodoCancel');
+
+    if (addTodoBtn) {
+        addTodoBtn.addEventListener('click', openTodoModal);
+    }
+
+    if (carryTodoBtn) {
+        carryTodoBtn.addEventListener('click', carryOverTodos);
+    }
+
+    if (btnTodoSave) {
+        btnTodoSave.addEventListener('click', saveTodo);
+    }
+
+    if (btnTodoCancel) {
+        btnTodoCancel.addEventListener('click', closeTodoModal);
+    }
+
+    if (todoModal) {
+        todoModal.addEventListener('click', (e) => {
+            if (e.target === todoModal) closeTodoModal();
+        });
+    }
+}
+
+// Get day data with todo array ensured
+function getDayData(date) {
+    const data = getData();
+    if (!data[date]) {
+        data[date] = { plan: [], real: [], todo: [] };
+    }
+    if (!data[date].todo) {
+        data[date].todo = [];
+    }
+    return data[date];
+}
+
+// Open TODO modal
+function openTodoModal() {
+    const dayData = getDayData(currentDate);
+    const incompleteTodos = dayData.todo.filter(t => !t.done);
+
+    if (incompleteTodos.length >= MAX_TODO_ITEMS) {
+        alert(`Maximum ${MAX_TODO_ITEMS} TODO items allowed. Complete or delete existing items first.`);
+        return;
+    }
+
+    const todoModal = document.getElementById('todoModal');
+    const todoTitleInput = document.getElementById('todoTitle');
+    todoTitleInput.value = '';
+    todoModal.classList.add('active');
+    todoTitleInput.focus();
+
+    // Handle Enter key
+    todoTitleInput.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+            saveTodo();
+        } else if (e.key === 'Escape') {
+            closeTodoModal();
+        }
+    };
+}
+
+// Close TODO modal
+function closeTodoModal() {
+    const todoModal = document.getElementById('todoModal');
+    todoModal.classList.remove('active');
+}
+
+// Save new TODO
+function saveTodo() {
+    const todoTitleInput = document.getElementById('todoTitle');
+    const title = todoTitleInput.value.trim();
+
+    if (!title) {
+        alert('Please enter a TODO item.');
+        return;
+    }
+
+    const data = getData();
+    if (!data[currentDate]) {
+        data[currentDate] = { plan: [], real: [], todo: [] };
+    }
+    if (!data[currentDate].todo) {
+        data[currentDate].todo = [];
+    }
+
+    const newTodo = {
+        id: generateId(),
+        title: title,
+        color: TODO_COLORS.notUrgentNotImportant, // Default: Gray (Not Urgent & Not Important)
+        done: false
+    };
+
+    data[currentDate].todo.push(newTodo);
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+
+    closeTodoModal();
+    renderTodoList();
+}
+
+// Render TODO list
+function renderTodoList() {
+    const todoListEl = document.getElementById('todoList');
+    const doneListEl = document.getElementById('doneList');
+
+    if (!todoListEl || !doneListEl) return;
+
+    const dayData = getDayData(currentDate);
+    const todos = dayData.todo || [];
+
+    const incompleteTodos = todos.filter(t => !t.done);
+    const completedTodos = todos.filter(t => t.done);
+
+    // Render incomplete TODOs
+    todoListEl.innerHTML = '';
+    if (incompleteTodos.length === 0) {
+        todoListEl.innerHTML = '<div class="todo-empty">No TODOs yet</div>';
+    } else {
+        incompleteTodos.forEach(todo => {
+            const todoEl = createTodoElement(todo, false);
+            todoListEl.appendChild(todoEl);
+        });
+    }
+
+    // Render completed TODOs
+    doneListEl.innerHTML = '';
+    if (completedTodos.length === 0) {
+        doneListEl.innerHTML = '<div class="todo-empty">No completed items</div>';
+    } else {
+        completedTodos.forEach(todo => {
+            const todoEl = createTodoElement(todo, true);
+            doneListEl.appendChild(todoEl);
+        });
+    }
+
+    // Update TODO count
+    const todoCountEl = document.getElementById('todoCount');
+    if (todoCountEl) {
+        todoCountEl.textContent = `(${incompleteTodos.length}/${MAX_TODO_ITEMS})`;
+    }
+}
+
+// Create TODO element
+function createTodoElement(todo, isDone) {
+    const todoEl = document.createElement('div');
+    todoEl.className = 'todo-item' + (isDone ? ' done' : '');
+    todoEl.dataset.id = todo.id;
+    todoEl.style.backgroundColor = todo.color;
+
+    // Checkbox
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'todo-checkbox';
+    checkbox.checked = isDone;
+    checkbox.addEventListener('change', () => toggleTodoComplete(todo.id));
+
+    // Title
+    const titleEl = document.createElement('span');
+    titleEl.className = 'todo-title';
+    titleEl.textContent = todo.title;
+    titleEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        editTodoTitle(todo.id, titleEl);
+    });
+
+    // Delete button
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'todo-delete-btn';
+    deleteBtn.textContent = '×';
+    deleteBtn.title = 'Delete';
+    deleteBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteTodo(todo.id);
+    });
+
+    todoEl.appendChild(checkbox);
+    todoEl.appendChild(titleEl);
+    todoEl.appendChild(deleteBtn);
+
+    // Right-click to cycle priority color (only for incomplete todos)
+    if (!isDone) {
+        todoEl.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (e.target === checkbox || e.target === deleteBtn) return;
+            toggleTodoPriority(todo.id);
+        });
+    }
+
+    return todoEl;
+}
+
+// Toggle TODO complete status
+function toggleTodoComplete(todoId) {
+    const data = getData();
+    const dayData = data[currentDate];
+    if (!dayData || !dayData.todo) return;
+
+    const todoIndex = dayData.todo.findIndex(t => t.id === todoId);
+    if (todoIndex === -1) return;
+
+    dayData.todo[todoIndex].done = !dayData.todo[todoIndex].done;
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+    renderTodoList();
+}
+
+// Toggle TODO priority color (cycle through Eisenhower Matrix)
+function toggleTodoPriority(todoId) {
+    const data = getData();
+    const dayData = data[currentDate];
+    if (!dayData || !dayData.todo) return;
+
+    const todoIndex = dayData.todo.findIndex(t => t.id === todoId);
+    if (todoIndex === -1) return;
+
+    const currentColor = dayData.todo[todoIndex].color;
+    const currentIndex = TODO_COLOR_CYCLE.indexOf(currentColor);
+    const nextIndex = (currentIndex + 1) % TODO_COLOR_CYCLE.length;
+    dayData.todo[todoIndex].color = TODO_COLOR_CYCLE[nextIndex];
+
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+    renderTodoList();
+}
+
+// Edit TODO title (inline editing)
+function editTodoTitle(todoId, titleEl) {
+    const data = getData();
+    const dayData = data[currentDate];
+    if (!dayData || !dayData.todo) return;
+
+    const todo = dayData.todo.find(t => t.id === todoId);
+    if (!todo) return;
+
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'todo-edit-input';
+    input.value = todo.title;
+
+    const saveEdit = () => {
+        const newTitle = input.value.trim();
+        if (newTitle && newTitle !== todo.title) {
+            todo.title = newTitle;
+            localStorage.setItem('dailyPlanner', JSON.stringify(data));
+        }
+        renderTodoList();
+    };
+
+    input.addEventListener('blur', saveEdit);
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            input.blur();
+        } else if (e.key === 'Escape') {
+            renderTodoList();
+        }
+    });
+
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+}
+
+// Delete TODO (no confirmation)
+function deleteTodo(todoId) {
+    const data = getData();
+    const dayData = data[currentDate];
+    if (!dayData || !dayData.todo) return;
+
+    dayData.todo = dayData.todo.filter(t => t.id !== todoId);
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+    renderTodoList();
+}
+
+// Carry over incomplete TODOs from yesterday
+function carryOverTodos() {
+    const yesterday = getYesterday(currentDate);
+    const data = getData();
+
+    const yesterdayData = data[yesterday];
+    if (!yesterdayData || !yesterdayData.todo) {
+        alert('No TODOs from yesterday to carry over.');
+        return;
+    }
+
+    const incompleteTodos = yesterdayData.todo.filter(t => !t.done);
+    if (incompleteTodos.length === 0) {
+        alert('No incomplete TODOs from yesterday.');
+        return;
+    }
+
+    const todayData = getDayData(currentDate);
+    const currentIncompleteTodos = todayData.todo.filter(t => !t.done);
+    const availableSlots = MAX_TODO_ITEMS - currentIncompleteTodos.length;
+
+    if (availableSlots <= 0) {
+        alert(`TODO list is full (${MAX_TODO_ITEMS} items). Complete or delete existing items first.`);
+        return;
+    }
+
+    const todosToCarry = incompleteTodos.slice(0, availableSlots);
+    const message = todosToCarry.length < incompleteTodos.length
+        ? `Carry ${todosToCarry.length} of ${incompleteTodos.length} incomplete TODOs? (Only ${availableSlots} slots available)`
+        : `Carry ${todosToCarry.length} incomplete TODO(s) from yesterday?`;
+
+    openConfirmModal(message, () => {
+        if (!data[currentDate]) {
+            data[currentDate] = { plan: [], real: [], todo: [] };
+        }
+        if (!data[currentDate].todo) {
+            data[currentDate].todo = [];
+        }
+
+        todosToCarry.forEach(todo => {
+            const newTodo = {
+                id: generateId(),
+                title: todo.title,
+                color: todo.color,
+                done: false
+            };
+            data[currentDate].todo.push(newTodo);
+        });
+
+        localStorage.setItem('dailyPlanner', JSON.stringify(data));
+        renderTodoList();
+    });
+}
+
+// Get yesterday's date string
+function getYesterday(dateStr) {
+    const date = new Date(dateStr);
+    date.setDate(date.getDate() - 1);
+    return date.toISOString().split('T')[0];
 }
 
 // Initialize app
