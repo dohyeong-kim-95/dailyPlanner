@@ -1,6 +1,7 @@
 // Constants
 const HOURS = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]; // 7AM - 8PM
 const MINUTES = [0, 10, 20, 30, 40, 50];
+const MAX_DDAYS = 3;
 
 // Block Colors (Time Categories)
 const BLOCK_COLORS = {
@@ -28,10 +29,15 @@ const MAX_TODO_ITEMS = 7;
 
 // Get current date in KST (Korea Standard Time)
 function getKSTDateString(date = new Date()) {
-    const kstOffset = 9 * 60; // KST is UTC+9
-    const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
-    const kstDate = new Date(utc + (kstOffset * 60000));
-    return kstDate.toISOString().split('T')[0];
+    // Use Intl API for reliable timezone conversion
+    return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Seoul' });
+}
+
+// Get day of week name
+function getDayOfWeek(dateStr) {
+    const date = new Date(dateStr + 'T12:00:00');
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return days[date.getDay()];
 }
 
 // State
@@ -61,7 +67,7 @@ const btnConfirmNo = document.getElementById('btnConfirmNo');
 // Initialize
 function init() {
     cleanOldData(); // Remove data from previous months
-    currentDateEl.textContent = currentDate;
+    updateDateDisplay();
     createTimeGrid(planContent, 'plan');
     createTimeGrid(realContent, 'real');
     setupColorPicker();
@@ -69,9 +75,18 @@ function init() {
     setupTodoEventListeners();
     setupNotesEventListeners();
     setupExportEventListeners();
+    setupDdayEventListeners();
+    setupCalendarEventListeners();
     setupKeyboardShortcuts();
     startClock();
     loadData();
+    renderDdayDashboard();
+}
+
+// Update date display with day of week
+function updateDateDisplay() {
+    const dayOfWeek = getDayOfWeek(currentDate);
+    currentDateEl.textContent = `${currentDate} (${dayOfWeek})`;
 }
 
 // Clean old data (keep only current month)
@@ -160,6 +175,13 @@ function setupKeyboardShortcuts() {
         if (e.ctrlKey && e.key === 'b') {
             e.preventDefault();
             backupAllData();
+            return;
+        }
+
+        // Ctrl + D: Add D-DAY
+        if (e.ctrlKey && e.key === 'd') {
+            e.preventDefault();
+            openDdayModal();
             return;
         }
     });
@@ -1483,16 +1505,25 @@ function goToPreviousDay() {
     const date = new Date(currentDate);
     date.setDate(date.getDate() - 1);
     currentDate = date.toISOString().split('T')[0];
-    currentDateEl.textContent = currentDate;
+    updateDateDisplay();
     loadData();
+    renderDdayDashboard();
 }
 
 function goToNextDay() {
     const date = new Date(currentDate);
     date.setDate(date.getDate() + 1);
     currentDate = date.toISOString().split('T')[0];
-    currentDateEl.textContent = currentDate;
+    updateDateDisplay();
     loadData();
+    renderDdayDashboard();
+}
+
+function goToDate(dateStr) {
+    currentDate = dateStr;
+    updateDateDisplay();
+    loadData();
+    renderDdayDashboard();
 }
 
 // ============================================
@@ -1837,6 +1868,342 @@ function getYesterday(dateStr) {
     const date = new Date(dateStr);
     date.setDate(date.getDate() - 1);
     return date.toISOString().split('T')[0];
+}
+
+// ============================================
+// D-DAY FUNCTIONS
+// ============================================
+
+let editingDdayId = null;
+
+function getDDays() {
+    const data = getData();
+    return data._ddays || [];
+}
+
+function saveDDays(ddays) {
+    const data = getData();
+    data._ddays = ddays;
+    localStorage.setItem('dailyPlanner', JSON.stringify(data));
+}
+
+function calculateDDayCount(targetDateStr) {
+    const today = getKSTDateString();
+    const target = new Date(targetDateStr + 'T00:00:00');
+    const current = new Date(today + 'T00:00:00');
+    const diffTime = target - current;
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays;
+}
+
+function renderDdayDashboard() {
+    const ddayList = document.getElementById('ddayList');
+    if (!ddayList) return;
+
+    const ddays = getDDays();
+    ddayList.innerHTML = '';
+
+    if (ddays.length === 0) {
+        ddayList.innerHTML = '<span class="dday-empty">No D-DAYs set</span>';
+        return;
+    }
+
+    ddays.forEach(dday => {
+        const ddayEl = document.createElement('div');
+        ddayEl.className = 'dday-item';
+        ddayEl.dataset.id = dday.id;
+
+        const count = calculateDDayCount(dday.date);
+        const countText = count === 0 ? 'D-DAY' : (count > 0 ? `D-${count}` : `D+${Math.abs(count)}`);
+        const countClass = count === 0 ? 'dday-today' : (count > 0 ? 'dday-future' : 'dday-past');
+
+        ddayEl.innerHTML = `
+            <span class="dday-emoji">${dday.emoji || '📌'}</span>
+            <span class="dday-title">${dday.title}</span>
+            <span class="dday-count ${countClass}">${countText}</span>
+        `;
+
+        // Click to edit
+        ddayEl.addEventListener('click', () => editDday(dday.id));
+
+        // Right-click to delete
+        ddayEl.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            deleteDday(dday.id);
+        });
+
+        ddayList.appendChild(ddayEl);
+    });
+}
+
+function openDdayModal(ddayId = null) {
+    const ddays = getDDays();
+
+    if (!ddayId && ddays.length >= MAX_DDAYS) {
+        alert(`Maximum ${MAX_DDAYS} D-DAYs allowed. Delete an existing one first.`);
+        return;
+    }
+
+    const modal = document.getElementById('ddayModal');
+    const titleInput = document.getElementById('ddayTitle');
+    const emojiInput = document.getElementById('ddayEmoji');
+    const dateInput = document.getElementById('ddayDate');
+    const modalTitle = document.getElementById('ddayModalTitle');
+
+    editingDdayId = ddayId;
+
+    if (ddayId) {
+        // Edit mode
+        const dday = ddays.find(d => d.id === ddayId);
+        if (dday) {
+            modalTitle.textContent = 'Edit D-DAY';
+            titleInput.value = dday.title;
+            emojiInput.value = dday.emoji || '';
+            dateInput.value = dday.date;
+        }
+    } else {
+        // Add mode
+        modalTitle.textContent = 'Add D-DAY';
+        titleInput.value = '';
+        emojiInput.value = '';
+        dateInput.value = '';
+    }
+
+    modal.classList.add('active');
+    titleInput.focus();
+}
+
+function closeDdayModal() {
+    const modal = document.getElementById('ddayModal');
+    modal.classList.remove('active');
+    editingDdayId = null;
+}
+
+function saveDday() {
+    const titleInput = document.getElementById('ddayTitle');
+    const emojiInput = document.getElementById('ddayEmoji');
+    const dateInput = document.getElementById('ddayDate');
+
+    const title = titleInput.value.trim();
+    const emoji = emojiInput.value.trim();
+    const date = dateInput.value;
+
+    if (!title) {
+        alert('Please enter a title.');
+        return;
+    }
+
+    if (!date) {
+        alert('Please select a date.');
+        return;
+    }
+
+    const ddays = getDDays();
+
+    if (editingDdayId) {
+        // Update existing
+        const index = ddays.findIndex(d => d.id === editingDdayId);
+        if (index !== -1) {
+            ddays[index] = { ...ddays[index], title, emoji, date };
+        }
+    } else {
+        // Add new
+        const newDday = {
+            id: 'dday_' + Date.now(),
+            title,
+            emoji,
+            date
+        };
+        ddays.push(newDday);
+    }
+
+    saveDDays(ddays);
+    closeDdayModal();
+    renderDdayDashboard();
+}
+
+function editDday(ddayId) {
+    openDdayModal(ddayId);
+}
+
+function deleteDday(ddayId) {
+    openConfirmModal('Delete this D-DAY?', () => {
+        const ddays = getDDays().filter(d => d.id !== ddayId);
+        saveDDays(ddays);
+        renderDdayDashboard();
+    });
+}
+
+function setupDdayEventListeners() {
+    const addDdayBtn = document.getElementById('addDdayBtn');
+    const btnDdaySave = document.getElementById('btnDdaySave');
+    const btnDdayCancel = document.getElementById('btnDdayCancel');
+    const ddayModal = document.getElementById('ddayModal');
+    const ddayTitleInput = document.getElementById('ddayTitle');
+
+    if (addDdayBtn) addDdayBtn.addEventListener('click', () => openDdayModal());
+    if (btnDdaySave) btnDdaySave.addEventListener('click', saveDday);
+    if (btnDdayCancel) btnDdayCancel.addEventListener('click', closeDdayModal);
+
+    if (ddayModal) {
+        ddayModal.addEventListener('click', (e) => {
+            if (e.target === ddayModal) closeDdayModal();
+        });
+    }
+
+    if (ddayTitleInput) {
+        ddayTitleInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') saveDday();
+            if (e.key === 'Escape') closeDdayModal();
+        });
+    }
+}
+
+// ============================================
+// CALENDAR PICKER
+// ============================================
+
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth();
+
+function openCalendarModal() {
+    const modal = document.getElementById('calendarModal');
+    if (!modal) return;
+
+    // Set calendar to current date's month
+    const date = new Date(currentDate + 'T12:00:00');
+    calendarYear = date.getFullYear();
+    calendarMonth = date.getMonth();
+
+    renderCalendar();
+    modal.classList.add('active');
+}
+
+function closeCalendarModal() {
+    const modal = document.getElementById('calendarModal');
+    if (modal) modal.classList.remove('active');
+}
+
+function renderCalendar() {
+    const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+        'July', 'August', 'September', 'October', 'November', 'December'];
+
+    const calendarMonthEl = document.getElementById('calendarMonth');
+    const calendarGrid = document.getElementById('calendarGrid');
+
+    if (!calendarMonthEl || !calendarGrid) return;
+
+    calendarMonthEl.textContent = `${monthNames[calendarMonth]} ${calendarYear}`;
+    calendarGrid.innerHTML = '';
+
+    // Get first day of month and total days
+    const firstDay = new Date(calendarYear, calendarMonth, 1);
+    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+    const totalDays = lastDay.getDate();
+
+    // Get day of week for first day (0 = Sunday, convert to Monday start)
+    let startDay = firstDay.getDay();
+    startDay = startDay === 0 ? 6 : startDay - 1; // Convert to Monday = 0
+
+    const today = getKSTDateString();
+    const data = getData();
+
+    // Add empty cells for days before first day
+    for (let i = 0; i < startDay; i++) {
+        const emptyCell = document.createElement('div');
+        emptyCell.className = 'calendar-day empty';
+        calendarGrid.appendChild(emptyCell);
+    }
+
+    // Add day cells
+    for (let day = 1; day <= totalDays; day++) {
+        const dateStr = `${calendarYear}-${String(calendarMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayCell = document.createElement('div');
+        dayCell.className = 'calendar-day';
+        dayCell.textContent = day;
+
+        // Highlight today
+        if (dateStr === today) {
+            dayCell.classList.add('today');
+        }
+
+        // Highlight current selected date
+        if (dateStr === currentDate) {
+            dayCell.classList.add('selected');
+        }
+
+        // Show indicator if date has data
+        if (data[dateStr] && (data[dateStr].plan?.length > 0 || data[dateStr].real?.length > 0 || data[dateStr].todo?.length > 0)) {
+            dayCell.classList.add('has-data');
+        }
+
+        // Highlight weekends
+        const dayOfWeek = new Date(dateStr + 'T12:00:00').getDay();
+        if (dayOfWeek === 0 || dayOfWeek === 6) {
+            dayCell.classList.add('weekend');
+        }
+
+        dayCell.addEventListener('click', () => {
+            goToDate(dateStr);
+            closeCalendarModal();
+        });
+
+        calendarGrid.appendChild(dayCell);
+    }
+}
+
+function setupCalendarEventListeners() {
+    const currentDateEl = document.getElementById('currentDate');
+    const calendarPrev = document.getElementById('calendarPrev');
+    const calendarNext = document.getElementById('calendarNext');
+    const calendarToday = document.getElementById('calendarToday');
+    const btnCalendarClose = document.getElementById('btnCalendarClose');
+    const calendarModal = document.getElementById('calendarModal');
+
+    // Double-click on date to open calendar
+    if (currentDateEl) {
+        currentDateEl.addEventListener('dblclick', openCalendarModal);
+        currentDateEl.style.cursor = 'pointer';
+    }
+
+    if (calendarPrev) {
+        calendarPrev.addEventListener('click', () => {
+            calendarMonth--;
+            if (calendarMonth < 0) {
+                calendarMonth = 11;
+                calendarYear--;
+            }
+            renderCalendar();
+        });
+    }
+
+    if (calendarNext) {
+        calendarNext.addEventListener('click', () => {
+            calendarMonth++;
+            if (calendarMonth > 11) {
+                calendarMonth = 0;
+                calendarYear++;
+            }
+            renderCalendar();
+        });
+    }
+
+    if (calendarToday) {
+        calendarToday.addEventListener('click', () => {
+            goToDate(getKSTDateString());
+            closeCalendarModal();
+        });
+    }
+
+    if (btnCalendarClose) {
+        btnCalendarClose.addEventListener('click', closeCalendarModal);
+    }
+
+    if (calendarModal) {
+        calendarModal.addEventListener('click', (e) => {
+            if (e.target === calendarModal) closeCalendarModal();
+        });
+    }
 }
 
 // Initialize app

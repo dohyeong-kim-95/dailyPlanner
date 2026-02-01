@@ -8,6 +8,16 @@
 </head>
 <body>
     <div class="container">
+        <!-- D-DAY Dashboard -->
+        <section class="dday-section" id="ddaySection">
+            <div class="dday-container">
+                <div class="dday-list" id="ddayList">
+                    <!-- D-DAYs will be rendered here -->
+                </div>
+                <button class="btn-add-dday" id="addDdayBtn" title="Add D-DAY (Ctrl+D)">+ D-DAY</button>
+            </div>
+        </section>
+
         <header>
             <div class="header-top">
                 <div class="header-left">
@@ -21,7 +31,7 @@
             </div>
             <div class="date-control">
                 <button class="btn-prev">◀</button>
-                <span class="current-date" id="currentDate"></span>
+                <span class="current-date" id="currentDate" title="Double-click to open calendar"></span>
                 <button class="btn-next">▶</button>
             </div>
         </header>
@@ -212,6 +222,51 @@
             <div class="modal-actions">
                 <button class="btn-cancel" id="btnTodoCancel">Cancel</button>
                 <button class="btn-save" id="btnTodoSave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- D-DAY modal -->
+    <div class="modal" id="ddayModal">
+        <div class="modal-content">
+            <h3 id="ddayModalTitle">Add D-DAY</h3>
+            <div class="form-group">
+                <label for="ddayTitle">Title:</label>
+                <input type="text" id="ddayTitle" placeholder="e.g., Exam, Trip, Deadline">
+            </div>
+            <div class="form-group">
+                <label for="ddayEmoji">Emoji (optional):</label>
+                <input type="text" id="ddayEmoji" placeholder="e.g., 🎯 📚 ✈️" maxlength="4">
+            </div>
+            <div class="form-group">
+                <label for="ddayDate">Target Date:</label>
+                <input type="date" id="ddayDate">
+            </div>
+            <p class="dday-hint">Max 3 D-DAYs. Click to edit, right-click to delete.</p>
+            <div class="modal-actions">
+                <button class="btn-cancel" id="btnDdayCancel">Cancel</button>
+                <button class="btn-save" id="btnDdaySave">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calendar modal -->
+    <div class="modal" id="calendarModal">
+        <div class="modal-content calendar-modal">
+            <div class="calendar-header">
+                <button class="btn-calendar-nav" id="calendarPrev">◀</button>
+                <span class="calendar-month" id="calendarMonth">January 2026</span>
+                <button class="btn-calendar-nav" id="calendarNext">▶</button>
+            </div>
+            <div class="calendar-weekdays">
+                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid">
+                <!-- Calendar days will be rendered here -->
+            </div>
+            <div class="calendar-footer">
+                <button class="btn-today" id="calendarToday">Today</button>
+                <button class="btn-cancel" id="btnCalendarClose">Close</button>
             </div>
         </div>
     </div>
